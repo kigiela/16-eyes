@@ -26,14 +26,20 @@
   "keywords": [
     "claude-code",
     "claude",
+    "claude-skill",
+    "claude-code-plugin",
     "gemini-cli",
     "cursor",
     "github-copilot",
+    "github-action",
     "security-audit",
     "security-review",
+    "sast",
+    "code-review",
     "static-analysis",
     "vulnerability-scan",
     "ai-agent",
+    "agent-skill",
     "skill"
   ],
   "repository": {
