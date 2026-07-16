@@ -16,7 +16,9 @@
 > findings — several adversarial reviewers actively trying to disprove it. **Nothing
 > reaches the report on one agent's word alone.**
 
-**[▶ Watch the demo](./assets/demo-en.mp4)**
+![16 Eyes demo](./assets/demo-en.gif)
+
+<sub>[Full-quality video](./assets/demo-en.mp4)</sub>
 
 *[Leia em português](./README.pt-BR.md) · [Lee en español](./README.es.md)*
 
