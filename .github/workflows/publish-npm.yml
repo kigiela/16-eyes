@@ -1,14 +1,16 @@
 name: Publish to npm
 
 # Triggered by publishing a GitHub Release (which creates/points to a tag,
-# e.g. v0.2.0). Nothing publishes on every push to main — a release is a
+# e.g. v1.0.0). Nothing publishes on every push to main — a release is a
 # deliberate, explicit action a maintainer takes. See docs/release.md for the
 # full cut-a-release checklist.
 #
-# Required repo secret: NPM_TOKEN — an npm "Automation" token (npmjs.com →
-# your account → Access Tokens → Generate New Token → Automation), added at
-# Settings → Secrets and variables → Actions. Automation tokens can publish
-# without an interactive 2FA prompt, which is what a headless CI job needs.
+# Auth: npm Trusted Publishing (OIDC) — https://docs.npmjs.com/trusted-publishers
+# No NPM_TOKEN secret needed at all. One-time setup on npmjs.com instead:
+# package settings → Trusted Publisher → GitHub Actions → org "kigiela",
+# repo "16-eyes", workflow filename "publish-npm.yml", allowed action
+# "npm publish". Requires npm CLI >= 11.5.1 and Node >= 22.14.0 (hence
+# node-version below), both handled by actions/setup-node.
 
 on:
   release:
@@ -16,7 +18,7 @@ on:
 
 permissions:
   contents: read
-  id-token: write # for npm provenance (supply-chain attestation)
+  id-token: write # required for OIDC trusted publishing
 
 jobs:
   publish:
@@ -26,7 +28,7 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: "20"
+          node-version: "22"
           registry-url: "https://registry.npmjs.org"
 
       - name: Verify the release tag matches package.json's version
@@ -52,6 +54,4 @@ jobs:
           npm pack --dry-run
 
       - name: Publish to npm
-        run: npm publish --access public --provenance
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish --access public
