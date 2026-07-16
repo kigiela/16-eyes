@@ -17,7 +17,9 @@ escopado a diff/PR.**
 > achados de impacto alto — vários revisores adversariais tentando ativamente derrubar o
 > achado. **Nada entra no relatório só na palavra de um agente.**
 
-**[▶ Ver a demo](./assets/demo-pt-br.mp4)**
+![Demo do 16 Eyes](./assets/demo-pt-br.gif)
+
+<sub>[Vídeo em qualidade completa](./assets/demo-pt-br.mp4)</sub>
 
 *[Read in English](./README.md) · [Lee en español](./README.es.md)*
 
