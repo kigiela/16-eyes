@@ -9,6 +9,15 @@ name: Mirror to private Kigiela-Co repo
 # public repo remains the actual source of truth for all development; never
 # push changes directly to the private mirror.
 #
+# The mirror is intentionally MINIMAL — just `.claude-plugin/`, `skills/`,
+# and `README.md` — not a full copy of this repo. Mirroring everything
+# (npm/CLI source, other-tool integrations, marketing assets/videos) once
+# produced an 8.8MB repo that the plugin sync choked on with an opaque "1
+# sync error" and zero plugins discovered; the known-working reference
+# (Kigiela-Co/skill-guider) is ~50KB with this same minimal shape. Each
+# sync rewrites the mirror's history from scratch (single fresh commit) —
+# this repo has no history worth preserving, it's pure redistribution.
+#
 # Required repo secret: MIRROR_PUSH_TOKEN — a fine-grained PAT scoped ONLY
 # to Kigiela-Co/skill-16-eyes with "Contents: Read and write" permission.
 # The default GITHUB_TOKEN can't push to a different repo/org, hence the
@@ -33,10 +42,17 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-        with:
-          fetch-depth: 0
 
-      - name: Push mirror to Kigiela-Co/skill-16-eyes
+      - name: Build minimal plugin-only mirror content
+        run: |
+          set -euo pipefail
+          rm -rf /tmp/mirror-content
+          mkdir -p /tmp/mirror-content
+          cp -R .claude-plugin /tmp/mirror-content/
+          cp -R skills /tmp/mirror-content/
+          cp README.md /tmp/mirror-content/
+
+      - name: Push minimal mirror to Kigiela-Co/skill-16-eyes
         env:
           MIRROR_PUSH_TOKEN: ${{ secrets.MIRROR_PUSH_TOKEN }}
         run: |
@@ -45,4 +61,11 @@ jobs:
             echo "::error::MIRROR_PUSH_TOKEN isn't set as a repo secret — see this workflow's header comment for how to create it. Skipping mirror push."
             exit 1
           fi
-          git push "https://x-access-token:${MIRROR_PUSH_TOKEN}@github.com/Kigiela-Co/skill-16-eyes.git" "HEAD:main" --force
+          cd /tmp/mirror-content
+          git init -q
+          git checkout -q -b main
+          git config user.name "16-eyes-mirror-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Mirror from kigiela/16-eyes@${GITHUB_SHA}"
+          git push --force "https://x-access-token:${MIRROR_PUSH_TOKEN}@github.com/Kigiela-Co/skill-16-eyes.git" HEAD:main

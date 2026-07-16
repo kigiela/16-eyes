@@ -18,7 +18,7 @@
 
 ![16 Eyes demo](./assets/demo-en.gif)
 
-<sub>[Full-quality video](./assets/demo-en.mp4)</sub>
+<sub>[Full-quality video on YouTube](https://www.youtube.com/watch?v=sEHhsra7FxA)</sub>
 
 *[Leia em português](./README.pt-BR.md) · [Lee en español](./README.es.md)*
 
