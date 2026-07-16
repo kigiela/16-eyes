@@ -1,8 +1,7 @@
 name: '16 Eyes — Audit Diff'
 description: >-
-  AI-driven security review of a pull request's diff — runs this repo's
-  tailored investigation lenses, verifies every finding skeptically, and
-  adversarially disproves high-impact ones before they reach a PR comment.
+  AI-driven PR security review — tailored lenses, skeptical verification,
+  adversarial disproof of high-impact findings.
 author: 'kigiela'
 branding:
   icon: 'eye'
