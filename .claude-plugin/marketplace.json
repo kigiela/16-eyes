@@ -1,0 +1,14 @@
+{
+  "name": "16-eyes",
+  "owner": {
+    "name": "kigiela"
+  },
+  "description": "Full-repo and diff/PR-scoped AI security audits for Claude Code.",
+  "plugins": [
+    {
+      "name": "16-eyes",
+      "source": "./",
+      "description": "Profile the repo, design tailored investigation lenses, run them, verify every finding, adversarially review high-impact ones. Adds /16-eyes init, /16-eyes audit, /16-eyes audit-diff, /16-eyes fix."
+    }
+  ]
+}

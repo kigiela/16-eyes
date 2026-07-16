@@ -1,93 +1,85 @@
-# `/16-eyes audit` — analyze
+# `/16-eyes audit-diff` — analyze a diff or PR
 
-Read-only. Never edits code.
+Read-only. Never edits code. **The exact same engine as `/16-eyes audit`** (same
+persisted lenses, same verify → adversarial-review → synthesis pipeline, same
+guards) — the only difference is scope: each lens investigates a diff's changed
+hunks instead of the whole repository. Use this for reviewing a PR before merge;
+use full `/16-eyes audit` for an occasional deep sweep of everything, including
+code nobody touched recently.
 
 ## When invoked
 
-1. **Determine `today`** from your own session context (the current date is always
-   available to you) as `YYYY-MM-DD`.
-2. **Determine `focus`** (optional): if the user's invocation named a specific area to
-   concentrate on, pass that as `focus`. Otherwise omit it — the audit covers the whole
-   repo.
-3. **Read `.16-eyes/config.json`** if it exists (via the `Read` tool — the Workflow script
-   itself has no filesystem access). Extract `excludePatterns`, `depth`,
-   `adversarial.votesPerFinding`, and `language`. If the file is absent, proceed with no
-   config and say so in your final summary — `/16-eyes init` was never a hard requirement.
-4. **Call the `Workflow` tool** with `script` set to the *exact* contents of the code block
-   below (copy it verbatim — do not paraphrase or "improve" it inline), and
-   `args: { today, focus, excludePatterns, depth, votesPerFinding, language }` (all but
-   `today` may be omitted/undefined if there's no config). This IS the user's explicit
-   opt-in to multi-agent orchestration — the user invoking this named skill is the
-   consent; do not ask again before calling `Workflow`.
-5. **Take the workflow's return value** (`{ reportMarkdown, reportJson, stats }`) and write
-   **both** files with the `Write` tool:
-   - Markdown: `<outputDir>/SECURITY_AUDIT_<today>.md` (human-readable).
-   - JSON: `<outputDir>/SECURITY_AUDIT_<today>.json` (machine-readable — `reportJson`,
-     already a JSON string from the script).
-   - `<outputDir>` is `config.output.dir` if set, else `docs/` if that directory exists,
-     else the repo root. If a report for `<today>` already exists at that path (a same-day
-     re-run), append `-2`, `-3`, etc. to BOTH filenames — never overwrite an existing
-     report.
-   - Then write/overwrite `.16-eyes/last-run.json` (path from `config.lastRunPointer`,
-     default `.16-eyes/last-run.json`) with `{ markdown: "<md path>", json: "<json path>",
-     generatedAt: "<ISO timestamp from your own context>", stats }` — this is a small
-     pointer, not the full findings, so `/16-eyes fix` can find the latest run later
-     (including in a different session).
-6. **Report a short summary** to the user: counts (lenses run, findings confirmed real,
-   safe vs risky, any refuted-on-adversarial-review or corrupted-verification items), and
-   the paths to both files. Make clear that this skill **only produces the report — it
-   does not touch any code**. Fixing is `/16-eyes fix`, a deliberate separate step; offer
-   it, don't do it unprompted.
+1. **Determine `today`** from your own session context, as `YYYY-MM-DD`.
+
+2. **Determine the diff scope**, in this order:
+   - If the user's invocation named an explicit base ref/branch, or a PR number, use
+     that.
+   - Else, if the `GITHUB_BASE_REF` environment variable is set (Bash: `echo
+     "$GITHUB_BASE_REF"` — present in a GitHub Actions `pull_request` job), use it as
+     the base branch.
+   - Else, detect the repo's default branch (Bash: `git symbolic-ref
+     refs/remotes/origin/HEAD` and strip the `refs/remotes/origin/` prefix; if that
+     fails — common on a shallow/fresh clone with no tracking symref — fall back to
+     `main`, then `master`, whichever exists as `origin/<name>`).
+   - `base` = the merge-base of that branch and `HEAD` (Bash: `git merge-base
+     origin/<default> HEAD`), not the branch tip itself — so the diff is exactly what
+     the PR introduces, not everything the base branch has gained since the PR
+     started.
+   - **If a PR number was named and `gh` is available**, prefer `gh pr diff <n>` for
+     the diff text and `gh pr view <n> --json number,title,url` for metadata — this
+     works even without that PR's branch checked out locally (the common case in CI).
+
+3. **Gather the diff** (via `Bash` — the Workflow tool has no filesystem/git access):
+   - Changed file list: `git diff --name-status <base>...HEAD` (or `gh pr view
+     --json files` in PR mode).
+   - Full unified diff: `git diff <base>...HEAD` (or `gh pr diff <n>`).
+   - Read `.16-eyes/config.json` if present and drop any changed file matching
+     `excludePatterns` from what you gather — never send excluded paths to a lens.
+   - **Size guard**: if the diff is large (rule of thumb: over ~2000 changed lines,
+     or includes lockfiles/minified/vendored/generated-looking paths), drop the
+     largest/most-generated files from what gets sent to lenses. **Log which ones and
+     why** in your final summary — never silently claim full coverage of a diff you
+     actually trimmed.
+
+4. **Read `.16-eyes/config.json`** (`depth`, `adversarial.votesPerFinding`,
+   `language`, `lensesPointer`, default `.16-eyes/lenses.json`). **Read the lenses
+   file. If it doesn't exist, run the Auto-bootstrap flow from `init-flow.md` now**
+   (identical to `audit-flow.md` step 4) — then re-read it. `audit-diff` never
+   designs its own lenses; it only ever reuses the persisted set.
+
+5. **Call the `Workflow` tool** with `script` set to the *exact* contents of the code
+   block below, and `args: { today, base, head: 'HEAD', prNumber, changedFiles,
+   diffText, profile, lenses, depth, votesPerFinding, language }` (`profile` is
+   `{ languages, domain_summary }` from the lenses file, same as `audit-flow.md`).
+   This IS the user's explicit opt-in to multi-agent orchestration.
+
+6. **Take the workflow's return value** and write **both** files with `Write`:
+   - Markdown: `<outputDir>/SECURITY_AUDIT_DIFF_<today>.md`.
+   - JSON: `<outputDir>/SECURITY_AUDIT_DIFF_<today>.json`.
+   - Same `<outputDir>` resolution and same-day collision rule (`-2`, `-3`, ...) as
+     `audit-flow.md`.
+   - Then write/overwrite `.16-eyes/last-diff-run.json` (path from
+     `config.lastDiffRunPointer`, default `.16-eyes/last-diff-run.json`) with
+     `{ markdown, json, generatedAt, base, head, prNumber, stats }` — parallel to
+     `audit`'s `last-run.json`, so `/16-eyes fix` can find either report family.
+
+7. **Report a short summary**: the diff range reviewed (`base..head`, or `PR #N`),
+   any files dropped by the size guard, counts (findings confirmed real, safe vs
+   risky, refuted/corrupted), and the paths to both files. **If step 4
+   auto-bootstrapped config/lenses**, say so. Remind the user this only reviewed the
+   diff — pre-existing code is `/16-eyes audit`'s job, not this command's.
 
 ## The workflow script
 
 ```js
 export const meta = {
-  name: '16-eyes-audit',
+  name: '16-eyes-audit-diff',
   description:
-    'Profile a repo, design custom investigation lenses, run them, verify findings, adversarially review high-impact ones, and produce a classified report.',
-  phases: [
-    { title: 'Profile' },
-    { title: 'Lens design' },
-    { title: 'Lenses' },
-    { title: 'Verification' },
-    { title: 'Adversarial review' },
-    { title: 'Synthesis' },
-  ],
+    "Run a repo's persisted investigation lenses scoped to a diff, verify every finding, adversarially review high-impact ones, and produce a classified report.",
+  phases: [{ title: 'Lenses' }, { title: 'Verification' }, { title: 'Adversarial review' }, { title: 'Synthesis' }],
 }
 
-// ── Schemas ──────────────────────────────────────────────────────────────
-const PROFILE_SCHEMA = {
-  type: 'object',
-  properties: {
-    languages: { type: 'array', items: { type: 'string' } },
-    frameworks: { type: 'array', items: { type: 'string' } },
-    domain_summary: { type: 'string' },
-    architecture_summary: { type: 'string' },
-    risk_relevant_subsystems: { type: 'array', items: { type: 'string' } },
-  },
-  required: ['languages', 'domain_summary', 'architecture_summary', 'risk_relevant_subsystems'],
-}
-
-const LENSES_SCHEMA = {
-  type: 'object',
-  properties: {
-    lenses: {
-      type: 'array',
-      items: {
-        type: 'object',
-        properties: {
-          name: { type: 'string' },
-          focus: { type: 'string' },
-          prompt: { type: 'string' },
-        },
-        required: ['name', 'focus', 'prompt'],
-      },
-    },
-  },
-  required: ['lenses'],
-}
-
+// ── Schemas (identical to audit-flow.md — keep them in sync) ──────────────
 const FINDINGS_SCHEMA = {
   type: 'object',
   properties: {
@@ -126,10 +118,7 @@ const VERDICT_SCHEMA = {
 
 const REFUTE_SCHEMA = {
   type: 'object',
-  properties: {
-    refuted: { type: 'boolean' },
-    reason: { type: 'string' },
-  },
+  properties: { refuted: { type: 'boolean' }, reason: { type: 'string' } },
   required: ['refuted', 'reason'],
 }
 
@@ -139,16 +128,16 @@ const EXEC_SUMMARY_SCHEMA = {
   required: ['summary'],
 }
 
-// ── i18n — report content + agent output language ─────────────────────────
+// ── i18n ───────────────────────────────────────────────────────────────────
 const LANGUAGE_NAMES = { en: 'English', pt: 'Brazilian Portuguese', es: 'Spanish' }
 
 const T = {
   en: {
     intro:
-      "> Generated by the `16-eyes` skill: profiles the repository, designs investigation lenses tailored to it, runs them in parallel, verifies each finding skeptically, adversarially reviews (multiple independent skeptics) high-impact findings, and classifies the remainder into SAFE (mechanical fix) vs RISKY (needs a human decision). Not a linter, and not scoped to a single PR's diff — this is a sweep of the entire repository.",
+      '> Generated by the `16-eyes` skill: runs this repo\'s tailored investigation lenses (designed once by `/16-eyes init`) against a DIFF only — not the whole repository — verifies each finding skeptically, adversarially reviews (multiple independent skeptics) high-impact findings, and classifies the remainder into SAFE (mechanical fix) vs RISKY (needs a human decision). For a deep sweep of everything, including code this diff never touched, use `/16-eyes audit` instead.',
+    scope: 'Scope',
     methodology: 'Methodology',
-    repoProfile: 'Repo profile',
-    lensesDesigned: 'Lenses designed',
+    lensesRun: 'Lenses run',
     rawToVerified: 'Raw → verified findings',
     corruptedSuffix: 'with corrupted/failed verification (see appendix)',
     adversarialReview: 'Adversarial review',
@@ -179,10 +168,10 @@ const T = {
   },
   pt: {
     intro:
-      '> Gerado pelo skill `16-eyes`: perfila o repositório, desenha lentes de investigação sob medida pra ele, roda as lentes em paralelo, verifica cada achado ceticamente, faz revisão adversarial (múltiplos céticos independentes) nos achados de impacto alto, e classifica o resíduo em SAFE (correção mecânica) vs RISKY (decisão humana necessária). Não é um linter nem cobre só o diff de um PR — é um sweep do repositório inteiro.',
+      '> Gerado pelo skill `16-eyes`: roda as lentes de investigação deste repositório (desenhadas uma vez pelo `/16-eyes init`) contra um DIFF apenas — não o repositório inteiro — verifica cada achado ceticamente, faz revisão adversarial (múltiplos céticos independentes) nos achados de impacto alto, e classifica o resíduo em SAFE (correção mecânica) vs RISKY (decisão humana necessária). Para um sweep completo, incluindo código que este diff não tocou, use `/16-eyes audit`.',
+    scope: 'Escopo',
     methodology: 'Metodologia',
-    repoProfile: 'Perfil do repo',
-    lensesDesigned: 'Lentes desenhadas',
+    lensesRun: 'Lentes rodadas',
     rawToVerified: 'Achados brutos → verificados',
     corruptedSuffix: 'com verificação corrompida/falha (ver apêndice)',
     adversarialReview: 'Revisão adversarial',
@@ -213,10 +202,10 @@ const T = {
   },
   es: {
     intro:
-      '> Generado por el skill `16-eyes`: perfila el repositorio, diseña lentes de investigación a medida, las ejecuta en paralelo, verifica cada hallazgo de forma escéptica, hace una revisión adversarial (varios escépticos independientes) de los hallazgos de alto impacto, y clasifica el resto en SAFE (corrección mecánica) vs RISKY (requiere decisión humana). No es un linter ni se limita al diff de un PR — es un barrido de todo el repositorio.',
+      '> Generado por el skill `16-eyes`: ejecuta las lentes de investigación de este repositorio (diseñadas una vez por `/16-eyes init`) contra un DIFF solamente — no todo el repositorio — verifica cada hallazgo de forma escéptica, hace una revisión adversarial (varios escépticos independientes) de los hallazgos de alto impacto, y clasifica el resto en SAFE (corrección mecánica) vs RISKY (requiere decisión humana). Para un barrido completo, incluyendo código que este diff no tocó, usa `/16-eyes audit`.',
+    scope: 'Alcance',
     methodology: 'Metodología',
-    repoProfile: 'Perfil del repositorio',
-    lensesDesigned: 'Lentes diseñadas',
+    lensesRun: 'Lentes ejecutadas',
     rawToVerified: 'Hallazgos brutos → verificados',
     corruptedSuffix: 'con verificación corrupta/fallida (ver apéndice)',
     adversarialReview: 'Revisión adversarial',
@@ -247,12 +236,7 @@ const T = {
   },
 }
 
-// ── Helpers ──────────────────────────────────────────────────────────────
-
-// Guard against a corruption pattern seen twice in real runs of this exact
-// pattern: a schema-valid object where every string field is literally
-// "test" (stale cache / crossed test fixture). Never trust it blindly —
-// route it to manual review instead of silently trusting or dropping it.
+// ── Helpers (identical to audit-flow.md — keep them in sync) ─────────────
 function looksCorrupted(obj) {
   if (!obj || typeof obj !== 'object') return false
   const strings = Object.values(obj).filter((v) => typeof v === 'string' && v.length > 0)
@@ -265,8 +249,8 @@ function dedupKey(f) {
   return `${file}:${line}`
 }
 
-function verifyPrompt(f, focusHint, languageName) {
-  return `You are adversarially verifying a security finding raised by another agent during a full-repo audit${focusHint ? ` (scope: ${focusHint})` : ''}.
+function verifyPrompt(f, scopeHint, languageName) {
+  return `You are adversarially verifying a security finding raised by another agent during a diff-scoped review${scopeHint ? ` (${scopeHint})` : ''}.
 
 Finding: "${f.title}"
 File: ${f.file}${f.line ? `:${f.line}` : ''}
@@ -288,7 +272,7 @@ Write "why", "exploit_scenario", and "suggested_fix" in ${languageName}.`
 }
 
 function refutePrompt(f, languageName) {
-  return `Try to REFUTE this security finding from a full-repo audit (it already passed one verification pass and was classified impact=high — this is a 2nd, adversarial, independent check before it goes in a report someone will act on).
+  return `Try to REFUTE this security finding from a diff-scoped review (it already passed one verification pass and was classified impact=high — this is a 2nd, adversarial, independent check before it goes in a report someone will act on).
 
 Finding: "${f.title}"
 File: ${f.file}${f.line ? `:${f.line}` : ''}
@@ -301,11 +285,15 @@ Read the actual code yourself. Look hard for a reason this ISN'T actually exploi
 Write "reason" in ${languageName}.`
 }
 
-// ── Script body ──────────────────────────────────────────────────────────
+// ── Script body ────────────────────────────────────────────────────────────
 
-const focus = args && args.focus ? String(args.focus) : null
 const today = (args && args.today) || 'unknown-date'
-const excludePatterns = (args && Array.isArray(args.excludePatterns) && args.excludePatterns) || []
+const base = (args && args.base) || 'unknown-base'
+const head = (args && args.head) || 'HEAD'
+const prNumber = args && args.prNumber ? String(args.prNumber) : null
+const changedFiles = (args && Array.isArray(args.changedFiles) && args.changedFiles) || []
+const diffText = (args && args.diffText) || ''
+const profile = (args && args.profile) || {}
 const depth = args && args.depth === 'quick' ? 'quick' : 'thorough'
 const configVotes =
   args && Number.isFinite(args.votesPerFinding) && args.votesPerFinding > 0 ? args.votesPerFinding : null
@@ -313,75 +301,39 @@ const language = args && T[args.language] ? args.language : 'en'
 const L = T[language]
 const languageName = LANGUAGE_NAMES[language]
 
-const excludeNote = excludePatterns.length
-  ? `\n\nDo not investigate or report findings under these excluded paths (vendored/generated/fixtures, already reviewed as out of scope): ${excludePatterns.join(', ')}.`
-  : ''
-const depthNote =
-  depth === 'quick'
-    ? '\n\nDepth requested: QUICK — prioritize only the 4-8 highest-value lenses (the areas most likely to matter for this repo); skip lower-priority ones entirely rather than covering everything shallowly.'
-    : ''
+const scopeLabel = prNumber ? `PR #${prNumber}` : `${base}..${head}`
 
-log('Profiling the repository (stack, domains, architecture)...')
-phase('Profile')
-const profile = await agent(
-  `Profile this repository for a security-audit planning step. Explore its structure (package manifests, lockfiles, top-level directories, README, CI config, entry points, notable frameworks/ORMs/HTTP frameworks). Identify:
-- languages and frameworks in use
-- a short domain summary (what this application/service actually does, for whom)
-- a short architecture summary (monolith vs services, frontend/backend split, datastores, deploy target)
-- risk_relevant_subsystems: a list of specific things THIS repo has that matter for security (e.g. "handles payment/money movement", "has public webhooks", "calls an LLM with user-controlled input", "parses uploaded files", "has its own auth/session system", "runs SQL built from user input somewhere", "has an admin/internal-only surface", "is a monorepo with N packages") — be concrete and specific to what you actually find, not a generic list.${focus ? `\n\nThe user asked to focus this audit on: ${focus}. Still note the whole repo's shape, but flag if the focus area is smaller/larger than expected.` : ''}${excludeNote}`,
-  { schema: PROFILE_SCHEMA, phase: 'Profile', label: 'profile' },
-)
-log(
-  `Profile: ${(profile?.languages || []).join(', ')} · ${(profile?.risk_relevant_subsystems || []).length} risk-relevant subsystem(s) identified`,
-)
-
-phase('Lens design')
-const lensDesign = await agent(
-  `You are designing the investigation plan for a full-repository security audit, given this repo profile:
-
-Languages: ${(profile?.languages || []).join(', ')}
-Frameworks: ${(profile?.frameworks || []).join(', ')}
-Domain: ${profile?.domain_summary}
-Architecture: ${profile?.architecture_summary}
-Risk-relevant subsystems found: ${(profile?.risk_relevant_subsystems || []).join('; ')}
-${focus ? `User-requested focus: ${focus}` : ''}
-
-Produce a list of investigation LENSES — each one a specific, non-overlapping area an independent subagent will investigate in depth. Consider (include what applies, SKIP what doesn't, and ADD repo-specific ones not listed here):
-- authentication & session management
-- authorization / access control (roles, tenant isolation, IDOR)
-- injection surfaces per data sink (SQL/NoSQL/command/template) — one lens per DISTINCT sink technology if there's more than one
-- money movement / other irreversible actions (payments, deletions, sends) — validation, idempotency, confirmation
-- third-party webhook handlers (auth, replay, fail-open vs fail-closed)
-- file upload / import / parsing (arbitrary file types, size limits, formula/injection in generated files, zip bombs)
-- LLM/AI usage if any (prompt injection, untrusted data reaching the model, output trusted without validation)
-- frontend security (XSS, CSRF, exposed secrets in client bundle, client-only validation)
-- CI/CD supply chain (unpinned actions/deps, secret handling, install script risk, permission scope of CI tokens)
-- secrets & credentials management (hardcoded values, logging of sensitive data, rotation story)
-- infra-as-config (deploy config, exposed admin surfaces, missing rate limits)
-- dependency vulnerabilities (only if there's a clear signal worth a dedicated lens, not a generic "run npm audit")
-- business-logic-specific risks unique to this repo's actual domain (from the profile above)
-
-Aim for as many lenses as the repo's actual distinct surface area warrants — a small single-purpose service might need 6-8, a large multi-domain backend might need 18-20. Do NOT pad with redundant/near-duplicate lenses just to hit a round number, and do NOT skip a real distinct area to save calls.
-
-For each lens, write: a short "name" (slug-like), a one-line "focus" description, and a full "prompt" — the COMPLETE instructions you'd hand to an independent subagent with no other context, telling it exactly what to explore (which kind of files/patterns to grep for, what to read) and what to return: a list of findings, each with title, file, line (best-effort), description of the concrete issue, and an initial impact/probability guess. Tell each lens agent to anchor every finding to a real file:line it actually read — no speculation about code it didn't look at. Each lens's "prompt" you write MUST also tell that lens agent not to investigate the excluded paths below, if any.${excludeNote}${depthNote}`,
-  { schema: LENSES_SCHEMA, phase: 'Lens design', label: 'lens-design' },
-)
-const lenses = (lensDesign?.lenses || []).filter((l) => l && l.prompt && l.name)
-log(`${lenses.length} lens(es) designed: ${lenses.map((l) => l.name).join(', ')}`)
+const lenses = ((args && Array.isArray(args.lenses) && args.lenses) || []).filter((l) => l && l.prompt && l.name)
 if (lenses.length === 0) {
   return {
-    reportMarkdown: `# ${L.riskMatrixHeading.split(' ')[0]}\n\nFailed: no lenses were designed (the lens-design agent returned no valid lenses). Try again.`,
-    reportJson: JSON.stringify({ error: 'no-lenses-designed' }, null, 2),
+    reportMarkdown: `# 16 Eyes — diff review — ${today}\n\nFailed: no investigation lenses were available (\`.16-eyes/lenses.json\` was empty, and auto-bootstrap did not produce any). Run \`/16-eyes init\` and try again.`,
+    reportJson: JSON.stringify({ error: 'no-lenses-available' }, null, 2),
     stats: null,
   }
 }
 
-// ── Lenses → verification (pipeline, no barrier: each lens verifies as soon
-// as it finishes, without waiting for the others) ────────────────────────
-const seenKeys = new Set() // dedup by order of arrival across concurrent lenses — cost-only, not a correctness guarantee
+function diffLensPrompt(lens) {
+  return `You are reviewing ONLY a diff (${scopeLabel}) as part of a security review — not the whole repository. Your focus area: "${lens.focus}".
+
+Changed files in this diff:
+${changedFiles.map((f) => `- ${f}`).join('\n') || '(none)'}
+
+Unified diff:
+\`\`\`diff
+${diffText}
+\`\`\`
+
+${lens.prompt}
+
+Investigate ONLY within these changed hunks, from your focus area above. You may use \`Read\` on the full current file content for necessary surrounding context (e.g. to see a function's full body, or where a caller comes from), but do not go hunting for unrelated issues elsewhere in the repository — that is full \`/16-eyes audit\`'s job, not this one. If nothing in this diff falls under your focus area, return \`{"findings": []}\` — an empty result is a normal, expected outcome for most lenses on most diffs.`
+}
+
+// ── Lenses → verification (pipeline, no barrier) ──────────────────────────
+phase('Lenses')
+const seenKeys = new Set()
 const perLensVerified = await pipeline(
   lenses,
-  (lens) => agent(lens.prompt, { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}` }),
+  (lens) => agent(diffLensPrompt(lens), { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}` }),
   (raw, lens) => {
     const findings = (raw?.findings || []).filter((f) => f && f.title && f.file)
     const fresh = findings.filter((f) => {
@@ -395,7 +347,7 @@ const perLensVerified = await pipeline(
     }
     return parallel(
       fresh.map((f) => () =>
-        agent(verifyPrompt(f, focus, languageName), {
+        agent(verifyPrompt(f, scopeLabel, languageName), {
           schema: VERDICT_SCHEMA,
           phase: 'Verification',
           label: `verify:${lens.name}`,
@@ -422,8 +374,6 @@ phase('Adversarial review')
 const highImpact = realFindings.filter((f) => f.verdict.impact === 'high')
 const otherImpact = realFindings.filter((f) => f.verdict.impact !== 'high')
 
-// budget-aware: drops from the configured/default vote count to 1 refuter per finding
-// if the token budget is running low.
 const baseVotes = configVotes ?? (depth === 'quick' ? 1 : 3)
 const votesPerFinding = budget.total && budget.remaining() < 200_000 ? 1 : baseVotes
 if (highImpact.length > 0)
@@ -441,7 +391,6 @@ const adversarial = await parallel(
       ),
     ).then((votes) => {
       const valid = votes.filter(Boolean).filter((v) => !looksCorrupted(v))
-      // guard: 0 valid votes must NOT count as "survived" (a real bug seen in an earlier run of this pattern).
       const refuteCount = valid.filter((v) => v.refuted).length
       const survived = valid.length > 0 && refuteCount * 2 < valid.length
       return { ...f, adversarial: { votes: valid.length, refuted: refuteCount, survived } }
@@ -463,17 +412,16 @@ const riskyFindings = finalReal.filter((f) => f.verdict.fix_type === 'risky')
 // ── Synthesis ───────────────────────────────────────────────────────────────
 phase('Synthesis')
 const execSummaryOut = await agent(
-  `Write a short (3-6 sentence) executive summary in ${languageName} for a full-repo security audit report, given these results:
-- ${lenses.length} investigation lenses run, tailored to this repo (${profile?.domain_summary}).
+  `Write a short (3-6 sentence) executive summary in ${languageName} for a diff-scoped security review (${scopeLabel}), given these results:
+- ${lenses.length} investigation lenses run against this diff${profile?.domain_summary ? ` (repo: ${profile.domain_summary})` : ''}.
 - ${allVerified.length} candidate findings verified; ${realFindings.length} confirmed real, ${falsePositives.length} discarded as false-positive.
 - ${refutedHighImpact.length} high-impact finding(s) were refuted by adversarial review and dropped.
 - ${safeFindings.length} findings are SAFE to fix mechanically (no behavior change); ${riskyFindings.length} are RISKY (need a product/human decision before fixing).
-Do not list individual findings — just the shape of the result and what the reader should do next (review the risky findings, decide on each; safe ones can be applied directly).`,
+Do not list individual findings — just the shape of the result and what the reader should do next. Mention explicitly that this only reviewed the diff, not the whole repository.`,
   { schema: EXEC_SUMMARY_SCHEMA, phase: 'Synthesis', label: 'exec-summary' },
 )
 const execSummary = execSummaryOut?.summary || ''
 
-// stable ids for the structured findings handoff (consumed by /16-eyes fix)
 function withId(f, i) {
   return { id: `${f.lens}-${i}`, ...f }
 }
@@ -513,16 +461,17 @@ const riskMatrix = (() => {
 
 const corruptedSuffixText = corrupted.length ? `, ${corrupted.length} ${L.corruptedSuffix}` : ''
 
-const reportMarkdown = `# 16 Eyes — ${today}
+const reportMarkdown = `# 16 Eyes — diff review — ${today}
 
 ${L.intro}
+
+- **${L.scope}:** ${scopeLabel}${prNumber ? ` (base \`${base}\` → head \`${head}\`)` : ''} · ${changedFiles.length} file(s) changed
 
 ${execSummary}
 
 ## ${L.methodology}
 
-- **${L.repoProfile}:** ${(profile?.languages || []).join(', ')} · ${profile?.domain_summary}
-- **${L.lensesDesigned} (${lenses.length}):** ${lenses.map((l) => `\`${l.name}\` (${l.focus})`).join(', ')}
+- **${L.lensesRun} (${lenses.length}):** ${lenses.map((l) => `\`${l.name}\` (${l.focus})`).join(', ')}
 - **${L.rawToVerified}:** ${allVerified.length} candidates, ${realFindings.length} confirmed real, ${falsePositives.length} discarded as false positive${corruptedSuffixText}.
 - **${L.adversarialReview}:** ${L.adversarialSummary(highImpact.length, votesPerFinding, refutedHighImpact.length)}
 
@@ -564,6 +513,7 @@ const reportJson = JSON.stringify(
   {
     schemaVersion: 1,
     date: today,
+    diffScope: { base, head, prNumber, changedFiles },
     stats,
     findings: { safe: safeStructured, risky: riskyStructured },
     appendix: {
@@ -581,32 +531,23 @@ return { reportMarkdown, reportJson, stats }
 
 ## Design notes (for maintainers)
 
-- **Why `pipeline()` for lenses→verify, not `parallel()`+barrier:** verification of
-  lens A's findings starts the moment lens A finishes, without waiting on the
-  slowest lens. This is the canonical "Review → Verify" pipeline pattern from the
-  Workflow tool's own docs.
-- **Why adversarial review only for `impact:"high"`:** cost control — a single
-  skeptical verify pass is enough for medium/low findings; only findings that
-  would justify real urgency get the expensive multi-refuter pass before being
-  trusted enough to land in a report someone acts on.
-- **The "0 valid votes ≠ survived" guard** (`valid.length > 0 && refuteCount * 2
-  < valid.length`) exists because an earlier version of this exact pattern had a
-  real bug: if every refuter agent failed (rate limit, transient error), the
-  finding was treated as "survived" by default — meaning a finding could reach
-  the final report with **zero** actual adversarial scrutiny. Never regress this.
-- **`looksCorrupted()`** exists because two real audit runs of this pattern
-  returned a schema-valid object where every string field was the literal word
-  `"test"` (stale cache / crossed fixture from a prior run). Schema validation
-  alone doesn't catch this — always sanity-check field content, not just shape.
-- **Dedup is best-effort and cost-only**, not a correctness guarantee — a
-  finding that slips past it just gets verified twice, which is harmless.
-- **No filesystem access inside the Workflow script** (by design of the tool) —
-  the script returns `reportMarkdown`/`reportJson` as strings; writing them to
-  disk happens in step 5 of "When invoked" above, outside the script.
-- **`reportJson`'s `findings.safe[]`/`findings.risky[]`** (each with a stable
-  `id: "${lens.name}-${index}"`) exist specifically so `/16-eyes fix` never has
-  to regex structured data out of the markdown prose — see `fix-flow.md`.
-- **`language`/`excludePatterns`/`depth`/`votesPerFinding` all come from
-  `args`**, populated by the outer "when invoked" instructions from
-  `.16-eyes/config.json` (read via `Read`, since the script itself can't touch
-  the filesystem) — every one of them has a safe default when config is absent.
+- **Same engine, different scope.** Verify/adversarial-review/synthesis logic, every
+  guard (`looksCorrupted`, the "0 valid votes ≠ survived" rule, dedup) is identical to
+  `audit-flow.md` on purpose — keep the two in sync if either changes. The only real
+  difference is `diffLensPrompt()`, which wraps each persisted lens's own prompt with
+  the diff content and an instruction to stay inside it.
+- **Diff gathering happens outside the Workflow script** (step 2-3 of "When invoked"),
+  same reason as `audit-flow.md`: the tool has no filesystem/git access, so `git diff`/
+  `gh pr diff` output has to be fetched by the orchestrating agent and passed in via
+  `args`.
+- **No lens-design, ever, in this flow** — unlike `audit`, which can fall back to
+  redesigning lenses if truly none exist (guarded by auto-bootstrap), `audit-diff` has
+  no "whole repo" context to profile from a diff alone. It always reuses whatever
+  `init` (interactive or auto-bootstrapped) already produced.
+- **Empty findings per lens are the expected common case** — most lenses' focus areas
+  won't intersect most diffs. This is intentionally simple (run every lens, let
+  irrelevant ones return fast) rather than a fragile pre-filter guessing relevance from
+  file paths.
+- **`last-diff-run.json`** is a separate pointer from `audit`'s `last-run.json` so
+  `/16-eyes fix` (see `fix-flow.md`) can tell a full-audit report from a diff-scoped one
+  and pick whichever is actually newest/relevant.

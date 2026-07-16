@@ -6,21 +6,30 @@ low-stakes). It does **not** use the `Workflow` tool. Work directly in this sess
 
 ## Phase 1 — Locate the findings
 
-Try, in order:
+Try, in order. Both a full-repo `audit` report and a diff-scoped `audit-diff` report are
+valid sources — they carry the identical `findings.safe[]`/`findings.risky[]` shape —
+so consider both, and use whichever is actually the freshest/relevant one:
 
-1. **This conversation** — if `/16-eyes audit` already ran earlier in this same session,
-   use its `findings.safe[]`/`findings.risky[]` directly. Cheapest, guaranteed fresh.
-2. **`.16-eyes/last-run.json`** — `Read` it, then `Read` the `.json` path it points to.
-3. **No pointer, or it's stale/missing** — glob `SECURITY_AUDIT_*.json` in the configured
+1. **This conversation** — if `/16-eyes audit` or `/16-eyes audit-diff` already ran
+   earlier in this same session, use its `findings.safe[]`/`findings.risky[]` directly.
+   Cheapest, guaranteed fresh. If the user's `/16-eyes fix` invocation doesn't say which
+   one they mean and both ran this session, ask.
+2. **`.16-eyes/last-run.json`** (full audit) and/or **`.16-eyes/last-diff-run.json`**
+   (diff audit) — `Read` whichever exist, then `Read` the `.json` path each points to.
+   If both exist and the user didn't specify, prefer the more recent `generatedAt`, but
+   say so explicitly rather than silently picking one.
+3. **No pointer, or it's stale/missing** — glob `SECURITY_AUDIT*.json` (matches both
+   `SECURITY_AUDIT_<date>.json` and `SECURITY_AUDIT_DIFF_<date>.json`) in the configured
    (or default) output directory, take the newest by mtime. Tell the user this was a
    best-effort recovery, not a guaranteed-fresh source.
-4. **Nothing found anywhere** — say so plainly and run `/16-eyes audit` first (follow
-   `audit-flow.md` end to end), then continue here with its output. Never invent findings.
+4. **Nothing found anywhere** — say so plainly and run `/16-eyes audit` (or `audit-diff`,
+   whichever fits what the user actually wants fixed) first, then continue here with its
+   output. Never invent findings.
 
 Whichever source you used, **state it and its age** to the user before doing anything
 else (e.g. "using the audit from this session, run 2 minutes ago" vs. "using
-`docs/SECURITY_AUDIT_2026-07-10.json`, generated 6 days ago — code may have changed
-since").
+`docs/SECURITY_AUDIT_DIFF_2026-07-10.json` (PR #42), generated 6 days ago — code may
+have changed since").
 
 ## Phase 2 — Apply `safe` findings
 
