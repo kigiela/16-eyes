@@ -131,9 +131,12 @@ syntax differs per tool's own convention:
 | Cursor | `16-eyes-init` | `16-eyes-audit` | `16-eyes-audit-diff` | `16-eyes-fix` |
 | GitHub Copilot | `@16-eyes-init` | `@16-eyes-audit` | `@16-eyes-audit-diff` | `@16-eyes-fix` |
 
-**Honest caveat:** Claude Code's `Workflow` tool lets it run a script-authored pipeline
-with JSON-schema-validated agent calls — the fan-out, verify, and adversarial-review
-stages are hard-enforced, not just prompted. As of this writing, Gemini CLI, Cursor, and
+<details>
+<summary><strong>Honest caveat about the non–Claude Code adapters</strong></summary>
+
+Claude Code's `Workflow` tool lets it run a script-authored pipeline with
+JSON-schema-validated agent calls — the fan-out, verify, and adversarial-review stages
+are hard-enforced, not just prompted. As of this writing, Gemini CLI, Cursor, and
 Copilot all have parallel subagents, but none has that schema-enforcement primitive —
 their adapters ask each delegated agent to return a fenced JSON block and parse it, with
 the same corruption/refutation guards written as explicit instructions instead of
@@ -141,6 +144,8 @@ enforced code. It's the same methodology, with slightly weaker guarantees than t
 Claude Code version. GitHub Copilot's async coding agent specifically has no
 slash-command equivalent at all — it relies on `AGENTS.md` (also installed by
 `--target copilot`) for baseline awareness instead of a dedicated command.
+
+</details>
 
 ## CI
 
