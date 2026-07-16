@@ -20,7 +20,8 @@
     "README.md",
     "README.pt-BR.md",
     "README.es.md",
-    "LICENSE"
+    "LICENSE",
+    "SECURITY.md"
   ],
   "keywords": [
     "claude-code",
