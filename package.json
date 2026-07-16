@@ -1,7 +1,7 @@
 {
   "name": "16-eyes",
   "version": "0.1.0",
-  "description": "Full-repository security audits for Claude Code — profile the repo, design custom investigation lenses, run them, verify every finding, adversarially review high-impact ones. Install the skill, then use /16-eyes init, /16-eyes audit, /16-eyes fix inside Claude Code.",
+  "description": "AI-driven security audits — full-repo or diff/PR-scoped — for Claude Code, Gemini CLI, Cursor, and GitHub Copilot. Profiles the repo, designs tailored investigation lenses, runs them, verifies every finding, adversarially reviews high-impact ones. Install with --target <claude|gemini|cursor|copilot|all>, then use init/audit/audit-diff/fix.",
   "type": "module",
   "license": "MIT",
   "engines": {
@@ -13,7 +13,10 @@
   "files": [
     "bin",
     "src",
-    "skill",
+    "skills",
+    "integrations",
+    ".claude-plugin",
+    "docs",
     "README.md",
     "README.pt-BR.md",
     "README.es.md",
@@ -22,6 +25,9 @@
   "keywords": [
     "claude-code",
     "claude",
+    "gemini-cli",
+    "cursor",
+    "github-copilot",
     "security-audit",
     "security-review",
     "static-analysis",

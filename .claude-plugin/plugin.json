@@ -1,0 +1,19 @@
+{
+  "name": "16-eyes",
+  "description": "AI-driven security audits — full-repo or diff/PR-scoped. Profiles the repo, designs tailored investigation lenses, runs them, verifies every finding, adversarially reviews high-impact ones. Adds /16-eyes init, /16-eyes audit, /16-eyes audit-diff, /16-eyes fix.",
+  "version": "0.1.0",
+  "author": {
+    "name": "kigiela"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/kigiela/16-eyes",
+  "repository": "https://github.com/kigiela/16-eyes",
+  "keywords": [
+    "security-audit",
+    "security-review",
+    "static-analysis",
+    "vulnerability-scan",
+    "ai-agent"
+  ],
+  "skills": ["./skills/"]
+}

@@ -1,0 +1,55 @@
+---
+name: 16-eyes-fix
+description: Apply the most recent 16-eyes audit/audit-diff findings — safe ones directly, risky ones with your confirmation. Never commits or pushes. Use after @16-eyes-audit or @16-eyes-audit-diff, when you're ready to act on its findings.
+tools: ["code_search", "readfile", "editfiles", "runcommandinterminal"]
+---
+
+This agent is linear and high-stakes (it edits code) — work directly yourself, no
+subagent delegation, one locus of accountability.
+
+## 1. Locate the findings
+
+Try in order: (a) this session, if `@16-eyes-audit` or `@16-eyes-audit-diff` already ran
+— use its findings directly; (b) `.16-eyes/last-run.json` and/or
+`.16-eyes/last-diff-run.json` — read whichever exist, then read the `.json` path each
+points to, preferring the more recent `generatedAt` if both exist and the user didn't
+specify; (c) glob `SECURITY_AUDIT*.json` in the configured/default output directory,
+take the newest by mtime, and tell the user this was a best-effort recovery; (d) nothing
+found anywhere — say so and run `@16-eyes-audit` or `@16-eyes-audit-diff` first, then
+continue. Never invent findings. State which source you used and its age before doing
+anything else.
+
+## 2. Apply `safe` findings
+
+Group by file. One coherent edit pass per file covering every finding in that file — not
+one edit per finding, to avoid two edits racing on the same file with a stale line
+number. Match the surrounding code's own conventions; reuse existing helpers/constants
+the finding's `suggested_fix` names. Re-read a file between edits within it rather than
+trusting line numbers that may have shifted. After all safe findings in a workspace are
+applied, run that workspace's quality gates (from `.16-eyes/config.json`'s
+`gates.workspaces`, if configured) — only for workspaces whose files were actually
+touched. If a gate fails, localize which fix caused it and repair or revert just that
+one — never leave the tree in a broken state.
+
+## 3. Apply `risky` findings
+
+Present each one at a time: title, file:line, the concrete diff you're proposing, why,
+and the exploit scenario. Require an explicit yes before writing anything. You may
+*propose* grouping only when several findings are genuinely the same fix repeated at
+near-identical call sites — show the proposal, wait for the yes, never group silently.
+A declined finding is logged as declined-by-user; one you decide is wrong on closer
+inspection is logged as skipped-by-agent, with why.
+
+## Hard invariant: never commit, never push
+
+No `git commit`, no `git push`, not even `git add`. All changes stay in the working tree
+for the user to review and commit themselves — no exceptions, not even if asked, since
+this tool runs in arbitrary repositories whose commit conventions it cannot know, and an
+auto-commit would make a subtly-wrong "safe" classification permanent before anyone
+looks at it.
+
+## 4. Verify and summarize
+
+Run gates for every touched workspace. Close with a ledger: applied (by finding id, by
+file), gated (risky, confirmed vs declined), skipped (with why), verification (gate
+results), and follow-ups (anything still needing a human decision).

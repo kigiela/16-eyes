@@ -39,6 +39,38 @@
       "type": "string",
       "description": "Path to the small JSON pointer file /16-eyes audit updates after each run, so /16-eyes fix can find the latest report across sessions."
     },
+    "lastDiffRunPointer": {
+      "type": "string",
+      "description": "Path to the small JSON pointer file /16-eyes audit-diff updates after each run, so /16-eyes fix can find the latest diff-scoped report across sessions.",
+      "default": ".16-eyes/last-diff-run.json"
+    },
+    "lensesPointer": {
+      "type": "string",
+      "description": "Path to the persisted investigation-lens set written by /16-eyes init (repo profile + tailored lenses). /16-eyes audit and /16-eyes audit-diff both load lenses from here instead of redesigning them per run. If missing, init runs automatically (non-interactively, with defaults) before either command proceeds.",
+      "default": ".16-eyes/lenses.json"
+    },
+    "ci": {
+      "type": "object",
+      "description": "Settings consumed by the optional CI templates (skills/16-eyes/assets/ci/) — not read by audit/audit-diff themselves.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "description": "Whether /16-eyes init scaffolded a GitHub Actions template for this repo.",
+          "default": false
+        },
+        "failOn": {
+          "type": "string",
+          "enum": ["none", "risky", "any"],
+          "default": "none",
+          "description": "Whether the CI job should fail (block a required status check) based on audit-diff results. 'none' = comment only, never fails (default — matches the industry convention of a neutral, non-blocking check). 'risky' = fail if any RISKY finding survived adversarial review. 'any' = fail on any confirmed finding, safe or risky."
+        },
+        "commentOnPr": {
+          "type": "boolean",
+          "default": true,
+          "description": "Whether the CI job posts the audit-diff report as a PR comment."
+        }
+      }
+    },
     "gates": {
       "type": "object",
       "properties": {
