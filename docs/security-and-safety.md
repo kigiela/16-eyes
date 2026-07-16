@@ -64,12 +64,11 @@ relying on this tool in a context where that matters.
 
 ## Third-party services required
 
-- **Anthropic API** (via the Claude Code CLI, or `anthropics/claude-code-action` in
-  CI) — required to perform the analysis, using your own `ANTHROPIC_API_KEY`.
-- **GitHub API** — used to read PR diffs and post the report as a PR comment, using
-  the workflow's own `GITHUB_TOKEN` or a token you supply.
-- No other third-party service is used. The maintainer's infrastructure receives no
-  data — there is no backend.
+This tool calls the Anthropic API to perform the security analysis, using an API key
+you provide — Anthropic never receives it from us. In CI, it also calls the GitHub API
+to read the pull request's changes and post the results as a comment, using GitHub's
+own token for the workflow (or one you supply). No other third-party service is used,
+and the maintainer's infrastructure receives no data — there is no backend.
 
 ## Reporting a security issue in 16 Eyes itself
 
