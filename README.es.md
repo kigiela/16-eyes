@@ -1,5 +1,7 @@
 # 16 Eyes
 
+![16 Eyes](./assets/Background.png)
+
 **Auditorías de seguridad impulsadas por IA para [Claude Code](https://claude.com/claude-code),
 [Gemini CLI](https://geminicli.com/), [Cursor](https://cursor.com/) y
 [GitHub Copilot](https://github.com/features/copilot) — todo el repositorio o
