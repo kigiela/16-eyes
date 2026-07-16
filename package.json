@@ -1,0 +1,40 @@
+{
+  "name": "16-eyes",
+  "version": "0.1.0",
+  "description": "Full-repository security audits for Claude Code — profile the repo, design custom investigation lenses, run them, verify every finding, adversarially review high-impact ones. Install the skill, then use /16-eyes init, /16-eyes audit, /16-eyes fix inside Claude Code.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "bin": {
+    "16-eyes": "bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "skill",
+    "README.md",
+    "README.pt-BR.md",
+    "README.es.md",
+    "LICENSE"
+  ],
+  "keywords": [
+    "claude-code",
+    "claude",
+    "security-audit",
+    "security-review",
+    "static-analysis",
+    "vulnerability-scan",
+    "ai-agent",
+    "skill"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/kigiela/16-eyes.git"
+  },
+  "homepage": "https://github.com/kigiela/16-eyes#readme",
+  "bugs": {
+    "url": "https://github.com/kigiela/16-eyes/issues"
+  }
+}
