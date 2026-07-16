@@ -137,17 +137,21 @@ ferramenta:
 | Cursor | `16-eyes-init` | `16-eyes-audit` | `16-eyes-audit-diff` | `16-eyes-fix` |
 | GitHub Copilot | `@16-eyes-init` | `@16-eyes-audit` | `@16-eyes-audit-diff` | `@16-eyes-fix` |
 
-**Ressalva honesta:** a ferramenta `Workflow` do Claude Code roda um pipeline
-escrito-por-agente com chamadas validadas por JSON-schema — as etapas de fan-out,
-verificação e revisão adversarial são impostas de fato, não só sugeridas. No momento
-desta escrita, Gemini CLI, Cursor e Copilot têm subagentes paralelos, mas nenhum tem essa
-capacidade de impor schema — os adaptadores deles pedem pra cada agente delegado
-retornar um bloco JSON e fazem o parsing, com as mesmas travas de corrupção/refutação
-escritas como instruções explícitas em vez de código imposto. É a mesma metodologia, com
-garantias um pouco mais fracas que a versão Claude Code. O coding agent assíncrono do
-GitHub Copilot especificamente não tem equivalente a slash-command nenhum — ele depende
-do `AGENTS.md` (também instalado por `--target copilot`) pra ter um mínimo de contexto,
-em vez de um comando dedicado.
+<details>
+<summary><strong>Ressalva honesta sobre os adaptadores fora do Claude Code</strong></summary>
+
+A ferramenta `Workflow` do Claude Code roda um pipeline escrito-por-agente com chamadas
+validadas por JSON-schema — as etapas de fan-out, verificação e revisão adversarial são
+impostas de fato, não só sugeridas. No momento desta escrita, Gemini CLI, Cursor e
+Copilot têm subagentes paralelos, mas nenhum tem essa capacidade de impor schema — os
+adaptadores deles pedem pra cada agente delegado retornar um bloco JSON e fazem o
+parsing, com as mesmas travas de corrupção/refutação escritas como instruções explícitas
+em vez de código imposto. É a mesma metodologia, com garantias um pouco mais fracas que
+a versão Claude Code. O coding agent assíncrono do GitHub Copilot especificamente não
+tem equivalente a slash-command nenhum — ele depende do `AGENTS.md` (também instalado
+por `--target copilot`) pra ter um mínimo de contexto, em vez de um comando dedicado.
+
+</details>
 
 ## CI
 

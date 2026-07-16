@@ -138,17 +138,22 @@ cada herramienta:
 | Cursor | `16-eyes-init` | `16-eyes-audit` | `16-eyes-audit-diff` | `16-eyes-fix` |
 | GitHub Copilot | `@16-eyes-init` | `@16-eyes-audit` | `@16-eyes-audit-diff` | `@16-eyes-fix` |
 
-**Salvedad honesta:** la herramienta `Workflow` de Claude Code ejecuta un pipeline
-escrito por el agente con llamadas validadas por JSON-schema — las etapas de fan-out,
-verificación y revisión adversarial se imponen de verdad, no solo se sugieren. Al momento
-de escribir esto, Gemini CLI, Cursor y Copilot tienen subagentes paralelos, pero ninguno
-tiene esa capacidad de imponer un schema — sus adaptadores le piden a cada agente
-delegado que devuelva un bloque JSON y hacen el parsing ellos mismos, con las mismas
-protecciones de corrupción/refutación escritas como instrucciones explícitas en vez de
-código impuesto. Es la misma metodología, con garantías un poco más débiles que la
-versión de Claude Code. El coding agent asíncrono de GitHub Copilot en particular no
-tiene ningún equivalente a slash-command — depende de `AGENTS.md` (también instalado por
+<details>
+<summary><strong>Salvedad honesta sobre los adaptadores fuera de Claude Code</strong></summary>
+
+La herramienta `Workflow` de Claude Code ejecuta un pipeline escrito por el agente con
+llamadas validadas por JSON-schema — las etapas de fan-out, verificación y revisión
+adversarial se imponen de verdad, no solo se sugieren. Al momento de escribir esto,
+Gemini CLI, Cursor y Copilot tienen subagentes paralelos, pero ninguno tiene esa
+capacidad de imponer un schema — sus adaptadores le piden a cada agente delegado que
+devuelva un bloque JSON y hacen el parsing ellos mismos, con las mismas protecciones de
+corrupción/refutación escritas como instrucciones explícitas en vez de código impuesto.
+Es la misma metodología, con garantías un poco más débiles que la versión de Claude
+Code. El coding agent asíncrono de GitHub Copilot en particular no tiene ningún
+equivalente a slash-command — depende de `AGENTS.md` (también instalado por
 `--target copilot`) para tener un mínimo de contexto, en vez de un comando dedicado.
+
+</details>
 
 ## CI
 
