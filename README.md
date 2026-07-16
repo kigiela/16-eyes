@@ -165,4 +165,6 @@ merge gating, the raw-workflow alternative if you want every step spelled out).
 
 ## License
 
-MIT — see [LICENSE](./LICENSE).
+MIT — see [LICENSE](./LICENSE). Also: [Privacy Policy](./docs/privacy-policy.md) ·
+[Terms of Service](./docs/terms-of-service.md) ·
+[Security & safety disclosures](./docs/security-and-safety.md).

@@ -172,4 +172,6 @@ passo explicitamente).
 
 ## Licença
 
-MIT — ver [LICENSE](./LICENSE).
+MIT — ver [LICENSE](./LICENSE). Também: [Política de Privacidade](./docs/privacy-policy.md) ·
+[Termos de Serviço](./docs/terms-of-service.md) ·
+[Disclosures de segurança e transparência](./docs/security-and-safety.md).
