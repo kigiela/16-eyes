@@ -1,0 +1,48 @@
+name: Mirror to private Kigiela-Co repo
+
+# Keeps Kigiela-Co/skill-16-eyes (a private redistribution point registered
+# in the org's Plugins admin panel — Settings > Plugins > "Sync from
+# GitHub") up to date with this repo's main branch. That admin panel only
+# accepts private/internal repos ("Only private and internal repositories
+# are shown. To use a public repository, fork it to a private repo
+# first."), so this mirror exists purely to satisfy that restriction — this
+# public repo remains the actual source of truth for all development; never
+# push changes directly to the private mirror.
+#
+# Required repo secret: MIRROR_PUSH_TOKEN — a fine-grained PAT scoped ONLY
+# to Kigiela-Co/skill-16-eyes with "Contents: Read and write" permission.
+# The default GITHUB_TOKEN can't push to a different repo/org, hence the
+# separate token. One-time setup:
+#   1. https://github.com/settings/personal-access-tokens/new
+#      Resource owner: Kigiela-Co
+#      Repository access: Only select repositories -> skill-16-eyes
+#      Permissions: Contents -> Read and write
+#   2. gh secret set MIRROR_PUSH_TOKEN --repo kigiela/16-eyes
+#      (paste the token when prompted)
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  mirror:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Push mirror to Kigiela-Co/skill-16-eyes
+        env:
+          MIRROR_PUSH_TOKEN: ${{ secrets.MIRROR_PUSH_TOKEN }}
+        run: |
+          set -euo pipefail
+          if [ -z "${MIRROR_PUSH_TOKEN:-}" ]; then
+            echo "::error::MIRROR_PUSH_TOKEN isn't set as a repo secret — see this workflow's header comment for how to create it. Skipping mirror push."
+            exit 1
+          fi
+          git push "https://x-access-token:${MIRROR_PUSH_TOKEN}@github.com/Kigiela-Co/skill-16-eyes.git" "HEAD:main" --force
