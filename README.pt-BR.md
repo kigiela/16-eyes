@@ -157,9 +157,18 @@ por `--target copilot`) pra ter um mínimo de contexto, em vez de um comando ded
 
 ## CI
 
-`/16-eyes audit-diff` foi feito pra rodar em toda PR — veja [`docs/ci.md`](./docs/ci.md)
-pra configuração recomendada de GitHub Actions (`claude-code-action` oficial, só
-comentário por padrão, bloqueio de merge opcional).
+`/16-eyes audit-diff` foi feito pra rodar em toda PR. Configuração mais simples, como
+uma GitHub Action publicada:
+
+```yaml
+- uses: kigiela/16-eyes@v1
+  with:
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+Veja [`docs/ci.md`](./docs/ci.md) pro panorama completo (só comentário por padrão,
+bloqueio de merge opcional, e a alternativa com o workflow bruto se quiser ver cada
+passo explicitamente).
 
 ## Licença
 

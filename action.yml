@@ -1,0 +1,107 @@
+name: '16 Eyes — Audit Diff'
+description: >-
+  AI-driven security review of a pull request's diff — runs this repo's
+  tailored investigation lenses, verifies every finding skeptically, and
+  adversarially disproves high-impact ones before they reach a PR comment.
+author: 'kigiela'
+branding:
+  icon: 'eye'
+  color: 'purple'
+
+inputs:
+  anthropic_api_key:
+    description: 'Anthropic API key used to run Claude Code headlessly.'
+    required: true
+  github_token:
+    description: "Token used to post the PR comment via `gh`. Defaults to the job's own GITHUB_TOKEN."
+    required: false
+    default: ${{ github.token }}
+  claude_args:
+    description: 'Extra CLI flags passed to claude-code-action.'
+    required: false
+    default: '--permission-mode dontAsk'
+
+runs:
+  using: 'composite'
+  steps:
+    - name: Checkout (full history — needed for git merge-base)
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Install the 16-eyes skill into this checkout
+      shell: bash
+      run: npx --yes 16-eyes@latest install --project
+
+    - name: Ensure a CI-safe .claude/settings.json exists (never overwrites one already there)
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ ! -f .claude/settings.json ]; then
+          mkdir -p .claude
+          cp .claude/skills/16-eyes/assets/ci/settings.json .claude/settings.json
+        fi
+
+    - name: Run /16-eyes audit-diff
+      uses: anthropics/claude-code-action@v1
+      with:
+        anthropic_api_key: ${{ inputs.anthropic_api_key }}
+        prompt: "/16-eyes audit-diff"
+        claude_args: ${{ inputs.claude_args }}
+
+    - name: Post report + apply CI gate
+      shell: bash
+      env:
+        GH_TOKEN: ${{ inputs.github_token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+      run: |
+        set -euo pipefail
+
+        CONFIG=".16-eyes/config.json"
+        OUTPUT_DIR="docs"
+        FAIL_ON="none"
+        COMMENT_ON_PR="true"
+        if [ -f "$CONFIG" ]; then
+          OUTPUT_DIR=$(jq -r '.output.dir // "docs"' "$CONFIG")
+          FAIL_ON=$(jq -r '.ci.failOn // "none"' "$CONFIG")
+          COMMENT_ON_PR=$(jq -r '(.ci.commentOnPr // true)' "$CONFIG")
+        fi
+
+        REPORT_JSON=$(ls -t "$OUTPUT_DIR"/SECURITY_AUDIT_DIFF_*.json 2>/dev/null | head -n1 || true)
+        REPORT_MD=$(ls -t "$OUTPUT_DIR"/SECURITY_AUDIT_DIFF_*.md 2>/dev/null | head -n1 || true)
+
+        if [ -z "$REPORT_JSON" ]; then
+          echo "No SECURITY_AUDIT_DIFF_*.json found under $OUTPUT_DIR — skipping comment/gate."
+          exit 0
+        fi
+
+        if [ "$COMMENT_ON_PR" = "true" ] && [ -n "$REPORT_MD" ]; then
+          gh pr comment "$PR_NUMBER" --body-file "$REPORT_MD" --edit-last --create-if-none
+        fi
+
+        SAFE=$(jq -r '.stats.safe' "$REPORT_JSON")
+        RISKY=$(jq -r '.stats.risky' "$REPORT_JSON")
+        REAL=$(jq -r '.stats.real' "$REPORT_JSON")
+        echo "16 Eyes results — safe: $SAFE, risky: $RISKY, real: $REAL, ci.failOn: $FAIL_ON"
+
+        case "$FAIL_ON" in
+          risky)
+            if [ "$RISKY" -gt 0 ]; then
+              echo "::error::$RISKY risky finding(s) survived review — failing per ci.failOn=risky"
+              exit 1
+            fi
+            ;;
+          any)
+            if [ "$REAL" -gt 0 ]; then
+              echo "::error::$REAL confirmed finding(s) — failing per ci.failOn=any"
+              exit 1
+            fi
+            ;;
+          *)
+            echo "ci.failOn=none (default) — comment only, this job never fails."
+            ;;
+        esac

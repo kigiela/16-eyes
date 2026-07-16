@@ -8,10 +8,40 @@ that — not the default. This mirrors how Anthropic's own Code Review / `/secur
 integrations behave: the check completes, it just doesn't block anything unless you
 explicitly wire that up yourself.
 
-## Quick start
+## Quick start — the GitHub Action
 
-The easiest path is `/16-eyes init` — its interview has a "scaffold a CI template?"
-question that does everything below for you. This page is for doing it manually, or for
+The simplest way to wire this in is the published Action — one step, no copy-pasted
+YAML to keep in sync:
+
+```yaml
+name: 16 Eyes — audit diff
+on:
+  pull_request:
+    types: [opened, synchronize, reopened]
+permissions:
+  contents: read
+  pull-requests: write
+jobs:
+  audit-diff:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: kigiela/16-eyes@v1
+        with:
+          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+It checks out the repo, installs the `16-eyes` skill fresh into that checkout (no need
+to have committed `.claude/skills/16-eyes/` yourself), writes a CI-safe
+`.claude/settings.json` **only if you don't already have one**, runs `/16-eyes
+audit-diff`, posts the report as a PR comment, and applies your `ci.failOn` gate (see
+below) — all of it. Only real prerequisite: the `ANTHROPIC_API_KEY` secret (see
+Prerequisites below).
+
+## Alternative — copy the raw workflow yourself
+
+If you'd rather see every step explicitly (or need to customize beyond what the
+Action's inputs expose), `/16-eyes init`'s interview has a "scaffold a CI template?"
+question that writes the files below for you. This section is for doing it by hand, or
 understanding what got written.
 
 ## What gets installed
