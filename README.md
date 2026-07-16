@@ -1,5 +1,7 @@
 # 16 Eyes
 
+![16 Eyes](./assets/Background.png)
+
 **AI-driven security audits for [Claude Code](https://claude.com/claude-code),
 [Gemini CLI](https://geminicli.com/), [Cursor](https://cursor.com/), and
 [GitHub Copilot](https://github.com/features/copilot) — full-repo or diff/PR-scoped.**
