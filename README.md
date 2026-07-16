@@ -151,9 +151,17 @@ slash-command equivalent at all — it relies on `AGENTS.md` (also installed by
 
 ## CI
 
-`/16-eyes audit-diff` is designed to run on every PR — see [`docs/ci.md`](./docs/ci.md)
-for the recommended GitHub Actions setup (official `claude-code-action`, comment-only by
-default, opt-in merge gating).
+`/16-eyes audit-diff` is designed to run on every PR. Simplest setup, as a published
+GitHub Action:
+
+```yaml
+- uses: kigiela/16-eyes@v1
+  with:
+    anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
+```
+
+See [`docs/ci.md`](./docs/ci.md) for the full picture (comment-only by default, opt-in
+merge gating, the raw-workflow alternative if you want every step spelled out).
 
 ## License
 
