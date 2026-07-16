@@ -19,7 +19,7 @@ escopado a diff/PR.**
 
 ![Demo do 16 Eyes](./assets/demo-pt-br.gif)
 
-<sub>[Vídeo em qualidade completa](./assets/demo-pt-br.mp4)</sub>
+<sub>[Vídeo em qualidade completa no YouTube](https://www.youtube.com/watch?v=Dkodk7A7q-k)</sub>
 
 *[Read in English](./README.md) · [Lee en español](./README.es.md)*
 

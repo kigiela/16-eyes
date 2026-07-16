@@ -19,7 +19,7 @@ limitadas a diff/PR.**
 
 ![Demo de 16 Eyes](./assets/demo-es.gif)
 
-<sub>[Video en calidad completa](./assets/demo-es.mp4)</sub>
+<sub>[Video en calidad completa en YouTube](https://www.youtube.com/watch?v=tdKqpVFLX_4)</sub>
 
 *[Read in English](./README.md) · [Leia em português](./README.pt-BR.md)*
 
