@@ -1,7 +1,7 @@
 {
   "name": "16-eyes",
   "description": "AI-driven security audits — full-repo or diff/PR-scoped. Profiles the repo, designs tailored investigation lenses, runs them, verifies every finding, adversarially reviews high-impact ones. Adds /16-eyes init, /16-eyes audit, /16-eyes audit-diff, /16-eyes fix.",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "author": {
     "name": "kigiela"
   },
