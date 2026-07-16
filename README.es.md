@@ -1,13 +1,23 @@
 # 16 Eyes
 
-Auditorías de seguridad impulsadas por IA — de todo el repositorio o limitadas a
-diff/PR — para [Claude Code](https://claude.com/claude-code),
+**Auditorías de seguridad impulsadas por IA para [Claude Code](https://claude.com/claude-code),
 [Gemini CLI](https://geminicli.com/), [Cursor](https://cursor.com/) y
-[GitHub Copilot](https://github.com/features/copilot). Dieciséis ojos independientes
-revisan cada hallazgo antes de que llegue a tu informe: la
-lente que lo encontró, un verificador escéptico que relee el código real, y — para los
-hallazgos de alto impacto — varios revisores adversariales que intentan activamente
-refutarlo. Nada llega al informe solo por la palabra de un agente.
+[GitHub Copilot](https://github.com/features/copilot) — todo el repositorio o
+limitadas a diff/PR.**
+
+![Claude Code](https://img.shields.io/badge/Claude_Code-compatible-0F6E56)
+![Gemini CLI](https://img.shields.io/badge/Gemini_CLI-compatible-0F6E56)
+![Cursor](https://img.shields.io/badge/Cursor-compatible-0F6E56)
+![GitHub Copilot](https://img.shields.io/badge/GitHub_Copilot-compatible-0F6E56)
+
+![Cómo funciona 16 Eyes](./assets/how-it-works-es.png)
+
+> Dieciséis ojos independientes revisan cada hallazgo antes de que llegue a tu informe:
+> la lente que lo encontró, un verificador escéptico que relee el código real, y — para
+> los hallazgos de alto impacto — varios revisores adversariales que intentan
+> activamente refutarlo. **Nada llega al informe solo por la palabra de un agente.**
+
+**[▶ Ver la demo](./assets/demo-es.mp4)**
 
 *[Read in English](./README.md) · [Leia em português](./README.pt-BR.md)*
 

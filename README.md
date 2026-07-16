@@ -1,12 +1,22 @@
 # 16 Eyes
 
-AI-driven security audits — full-repo or diff/PR-scoped — for
-[Claude Code](https://claude.com/claude-code), [Gemini CLI](https://geminicli.com/),
-[Cursor](https://cursor.com/), and [GitHub Copilot](https://github.com/features/copilot).
-Sixteen independent eyes look at every finding before it reaches your report: the lens
-that found it, a skeptical verifier that re-reads the real code, and — for high-impact
-findings — several adversarial reviewers actively trying to disprove it. Nothing reaches
-the report on one agent's word alone.
+**AI-driven security audits for [Claude Code](https://claude.com/claude-code),
+[Gemini CLI](https://geminicli.com/), [Cursor](https://cursor.com/), and
+[GitHub Copilot](https://github.com/features/copilot) — full-repo or diff/PR-scoped.**
+
+![Claude Code](https://img.shields.io/badge/Claude_Code-supported-0F6E56)
+![Gemini CLI](https://img.shields.io/badge/Gemini_CLI-supported-0F6E56)
+![Cursor](https://img.shields.io/badge/Cursor-supported-0F6E56)
+![GitHub Copilot](https://img.shields.io/badge/GitHub_Copilot-supported-0F6E56)
+
+![How 16 Eyes works](./assets/how-it-works-en.png)
+
+> Sixteen independent eyes look at every finding before it reaches your report: the lens
+> that found it, a skeptical verifier that re-reads the real code, and — for high-impact
+> findings — several adversarial reviewers actively trying to disprove it. **Nothing
+> reaches the report on one agent's word alone.**
+
+**[▶ Watch the demo](./assets/demo-en.mp4)**
 
 *[Leia em português](./README.pt-BR.md) · [Lee en español](./README.es.md)*
 
