@@ -1,13 +1,23 @@
 # 16 Eyes
 
-Auditorias de segurança orientadas por IA — do repositório inteiro ou escopadas a
-diff/PR — para [Claude Code](https://claude.com/claude-code),
+**Auditorias de segurança orientadas por IA para [Claude Code](https://claude.com/claude-code),
 [Gemini CLI](https://geminicli.com/), [Cursor](https://cursor.com/) e
-[GitHub Copilot](https://github.com/features/copilot). Dezesseis olhos independentes
-olham cada achado antes dele chegar no seu relatório: a
-lente que o encontrou, um verificador cético que relê o código de verdade, e — pros
-achados de impacto alto — vários revisores adversariais tentando ativamente derrubar o
-achado. Nada entra no relatório só na palavra de um agente.
+[GitHub Copilot](https://github.com/features/copilot) — repositório inteiro ou
+escopado a diff/PR.**
+
+![Claude Code](https://img.shields.io/badge/Claude_Code-suportado-0F6E56)
+![Gemini CLI](https://img.shields.io/badge/Gemini_CLI-suportado-0F6E56)
+![Cursor](https://img.shields.io/badge/Cursor-suportado-0F6E56)
+![GitHub Copilot](https://img.shields.io/badge/GitHub_Copilot-suportado-0F6E56)
+
+![Como o 16 Eyes funciona](./assets/how-it-works-pt-br.png)
+
+> Dezesseis olhos independentes olham cada achado antes dele chegar no seu relatório: a
+> lente que o encontrou, um verificador cético que relê o código de verdade, e — pros
+> achados de impacto alto — vários revisores adversariais tentando ativamente derrubar o
+> achado. **Nada entra no relatório só na palavra de um agente.**
+
+**[▶ Ver a demo](./assets/demo-pt-br.mp4)**
 
 *[Read in English](./README.md) · [Lee en español](./README.es.md)*
 
