@@ -1,0 +1,57 @@
+name: Publish to npm
+
+# Triggered by publishing a GitHub Release (which creates/points to a tag,
+# e.g. v0.2.0). Nothing publishes on every push to main — a release is a
+# deliberate, explicit action a maintainer takes. See docs/release.md for the
+# full cut-a-release checklist.
+#
+# Required repo secret: NPM_TOKEN — an npm "Automation" token (npmjs.com →
+# your account → Access Tokens → Generate New Token → Automation), added at
+# Settings → Secrets and variables → Actions. Automation tokens can publish
+# without an interactive 2FA prompt, which is what a headless CI job needs.
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: read
+  id-token: write # for npm provenance (supply-chain attestation)
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          registry-url: "https://registry.npmjs.org"
+
+      - name: Verify the release tag matches package.json's version
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name }}
+        run: |
+          set -euo pipefail
+          TAG_VERSION="${TAG_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Release tag ($TAG_NAME) doesn't match package.json's version ($PKG_VERSION). Bump package.json, commit, and re-tag before releasing — never publish a version that doesn't match its tag."
+            exit 1
+          fi
+          echo "Tag $TAG_NAME matches package.json version $PKG_VERSION — proceeding."
+
+      - name: Sanity-check the package before publishing
+        run: |
+          set -euo pipefail
+          for f in $(find src bin -name "*.js"); do node --check "$f"; done
+          for f in .claude-plugin/plugin.json .claude-plugin/marketplace.json skills/16-eyes/assets/config.schema.json; do
+            node -e "JSON.parse(require('fs').readFileSync('$f','utf8'))"
+          done
+          npm pack --dry-run
+
+      - name: Publish to npm
+        run: npm publish --access public --provenance
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
