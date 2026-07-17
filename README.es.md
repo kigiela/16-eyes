@@ -126,6 +126,11 @@ working tree para que los revises.
    `SECURITY_AUDIT_DIFF_<fecha>.md`) como en un complemento legible por máquina
    (`.json`, consumido por `/16-eyes fix`).
 
+Ver la [Wiki](https://github.com/kigiela/16-eyes/wiki) para una inmersión técnica más
+profunda: los guards exactos de verificación/revisión adversarial, cómo las categorías de
+lentes se mapean al OWASP Top 10:2025, el tradeoff entre auditoría full-repo vs. diff, y
+salvedades honestas.
+
 ## Otras herramientas
 
 Gemini CLI, Cursor y GitHub Copilot tienen cada uno su propio adaptador ligero en
