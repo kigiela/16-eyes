@@ -313,7 +313,7 @@ if (focus) {
   log(`Selecting which of the ${allLenses.length} persisted lens(es) are relevant to focus: "${focus}"...`)
   const selection = await agent(
     `Given this focus area for a security review: "${focus}", and this list of available investigation lenses (name — focus), select every lens that's plausibly relevant. Be inclusive when in doubt — a lens can stay even if only partially relevant, but leave out ones with clearly no connection.\n\n${allLenses.map((l) => `- ${l.name} — ${l.focus}`).join('\n')}`,
-    { schema: LENS_SELECTION_SCHEMA, phase: 'Lens selection', label: 'lens-selection' },
+    { schema: LENS_SELECTION_SCHEMA, phase: 'Lens selection', label: 'lens-selection', model: 'sonnet' },
   )
   const selectedNames = new Set((selection?.selectedLensNames || []).map((n) => String(n)))
   const filtered = allLenses.filter((l) => selectedNames.has(l.name))
@@ -331,7 +331,7 @@ phase('Lenses')
 const seenKeys = new Set() // dedup by order of arrival across concurrent lenses — cost-only, not a correctness guarantee
 const perLensVerified = await pipeline(
   lenses,
-  (lens) => agent(lens.prompt, { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}` }),
+  (lens) => agent(lens.prompt, { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}`, model: 'sonnet' }),
   (raw, lens) => {
     const findings = (raw?.findings || []).filter((f) => f && f.title && f.file)
     const fresh = findings.filter((f) => {
@@ -349,6 +349,7 @@ const perLensVerified = await pipeline(
           schema: VERDICT_SCHEMA,
           phase: 'Verification',
           label: `verify:${lens.name}`,
+          model: 'sonnet',
         }).then((v) => {
           const corrupted = !v || looksCorrupted(v)
           return { ...f, lens: lens.name, verdict: corrupted ? null : v, verdict_corrupted: corrupted }
@@ -387,6 +388,7 @@ const adversarial = await parallel(
           schema: REFUTE_SCHEMA,
           phase: 'Adversarial review',
           label: `refute:${f.lens}:${i}`,
+          model: 'sonnet',
         }),
       ),
     ).then((votes) => {
@@ -419,7 +421,7 @@ const execSummaryOut = await agent(
 - ${refutedHighImpact.length} high-impact finding(s) were refuted by adversarial review and dropped.
 - ${safeFindings.length} findings are SAFE to fix mechanically (no behavior change); ${riskyFindings.length} are RISKY (need a product/human decision before fixing).
 Do not list individual findings — just the shape of the result and what the reader should do next (review the risky findings, decide on each; safe ones can be applied directly).`,
-  { schema: EXEC_SUMMARY_SCHEMA, phase: 'Synthesis', label: 'exec-summary' },
+  { schema: EXEC_SUMMARY_SCHEMA, phase: 'Synthesis', label: 'exec-summary', model: 'sonnet' },
 )
 const execSummary = execSummaryOut?.summary || ''
 

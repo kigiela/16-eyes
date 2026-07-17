@@ -231,7 +231,7 @@ const profile = await agent(
 - a short domain summary (what this application/service actually does, for whom)
 - a short architecture summary (monolith vs services, frontend/backend split, datastores, deploy target)
 - risk_relevant_subsystems: a list of specific things THIS repo has that matter for security (e.g. "handles payment/money movement", "has public webhooks", "calls an LLM with user-controlled input", "parses uploaded files", "has its own auth/session system", "runs SQL built from user input somewhere", "has an admin/internal-only surface", "is a monorepo with N packages") — be concrete and specific to what you actually find, not a generic list.${excludeNote}`,
-  { schema: PROFILE_SCHEMA, phase: 'Profile', label: 'profile' },
+  { schema: PROFILE_SCHEMA, phase: 'Profile', label: 'profile', model: 'sonnet' },
 )
 log(
   `Profile: ${(profile?.languages || []).join(', ')} · ${(profile?.risk_relevant_subsystems || []).length} risk-relevant subsystem(s) identified`,
@@ -265,7 +265,7 @@ Produce a list of investigation LENSES — each one a specific, non-overlapping 
 Aim for as many lenses as the repo's actual distinct surface area warrants — a small single-purpose service might need 6-8, a large multi-domain backend might need 18-20. Do NOT pad with redundant/near-duplicate lenses just to hit a round number, and do NOT skip a real distinct area to save calls.
 
 For each lens, write: a short "name" (slug-like), a one-line "focus" description, and a full "prompt" — the COMPLETE instructions you'd hand to an independent subagent with no other context, telling it exactly what to explore (which kind of files/patterns to grep for, what to read) and what to return: a list of findings, each with title, file, line (best-effort), description of the concrete issue, and an initial impact/probability guess. Tell each lens agent to anchor every finding to a real file:line it actually read — no speculation about code it didn't look at. Each lens's "prompt" you write MUST also tell that lens agent not to investigate the excluded paths below, if any. Since this same lens may later run scoped to just a diff instead of the whole repo, phrase the prompt so it still makes sense when told "investigate only within these changed files/hunks" — i.e., don't hard-code "explore the whole repo" as the only mode of operation.${excludeNote}${depthNote}`,
-  { schema: LENSES_SCHEMA, phase: 'Lens design', label: 'lens-design' },
+  { schema: LENSES_SCHEMA, phase: 'Lens design', label: 'lens-design', model: 'sonnet' },
 )
 const lenses = (lensDesign?.lenses || []).filter((l) => l && l.prompt && l.name)
 log(`${lenses.length} lens(es) designed: ${lenses.map((l) => l.name).join(', ')}`)

@@ -333,7 +333,7 @@ phase('Lenses')
 const seenKeys = new Set()
 const perLensVerified = await pipeline(
   lenses,
-  (lens) => agent(diffLensPrompt(lens), { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}` }),
+  (lens) => agent(diffLensPrompt(lens), { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}`, model: 'sonnet' }),
   (raw, lens) => {
     const findings = (raw?.findings || []).filter((f) => f && f.title && f.file)
     const fresh = findings.filter((f) => {
@@ -351,6 +351,7 @@ const perLensVerified = await pipeline(
           schema: VERDICT_SCHEMA,
           phase: 'Verification',
           label: `verify:${lens.name}`,
+          model: 'sonnet',
         }).then((v) => {
           const corrupted = !v || looksCorrupted(v)
           return { ...f, lens: lens.name, verdict: corrupted ? null : v, verdict_corrupted: corrupted }
@@ -387,6 +388,7 @@ const adversarial = await parallel(
           schema: REFUTE_SCHEMA,
           phase: 'Adversarial review',
           label: `refute:${f.lens}:${i}`,
+          model: 'sonnet',
         }),
       ),
     ).then((votes) => {
@@ -418,7 +420,7 @@ const execSummaryOut = await agent(
 - ${refutedHighImpact.length} high-impact finding(s) were refuted by adversarial review and dropped.
 - ${safeFindings.length} findings are SAFE to fix mechanically (no behavior change); ${riskyFindings.length} are RISKY (need a product/human decision before fixing).
 Do not list individual findings — just the shape of the result and what the reader should do next. Mention explicitly that this only reviewed the diff, not the whole repository.`,
-  { schema: EXEC_SUMMARY_SCHEMA, phase: 'Synthesis', label: 'exec-summary' },
+  { schema: EXEC_SUMMARY_SCHEMA, phase: 'Synthesis', label: 'exec-summary', model: 'sonnet' },
 )
 const execSummary = execSummaryOut?.summary || ''
 
