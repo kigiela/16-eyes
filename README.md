@@ -120,6 +120,10 @@ changes in your working tree for you to review.
    report (`SECURITY_AUDIT_<date>.md` or `SECURITY_AUDIT_DIFF_<date>.md`) and a
    machine-readable companion (`.json`, consumed by `/16-eyes fix`).
 
+See the [Wiki](https://github.com/kigiela/16-eyes/wiki) for a deeper technical dive: the
+exact verification/adversarial-review guards, how lens categories map to the OWASP Top
+10:2025, full-repo vs. diff-audit tradeoffs, and honest caveats.
+
 ## Other tools
 
 Gemini CLI, Cursor, and GitHub Copilot each get their own thin adapter under
