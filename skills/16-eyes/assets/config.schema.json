@@ -21,6 +21,12 @@
       "default": "en",
       "description": "Default language for the audit report and narration. Can be overridden per-invocation."
     },
+    "model": {
+      "type": "string",
+      "enum": ["default", "sonnet", "opus", "haiku"],
+      "default": "sonnet",
+      "description": "Which model every subagent call in the audit pipeline (lens investigation, verification, adversarial review, synthesis) uses. 'default' inherits whatever model the invoking Claude Code session itself is on — cost then follows your own session's model choice, including Opus if that's what it's set to. 'sonnet'/'opus'/'haiku' pins every subagent call to that tier regardless of the session's own model. Defaults to 'sonnet' so a full audit's dozens of subagent calls stay cost-predictable unless you deliberately choose otherwise."
+    },
     "excludePatterns": {
       "type": "array",
       "items": { "type": "string" },

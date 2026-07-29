@@ -42,14 +42,15 @@ code nobody touched recently.
      actually trimmed.
 
 4. **Read `.16-eyes/config.json`** (`depth`, `adversarial.votesPerFinding`,
-   `language`, `lensesPointer`, default `.16-eyes/lenses.json`). **Read the lenses
-   file. If it doesn't exist, run the Auto-bootstrap flow from `init-flow.md` now**
-   (identical to `audit-flow.md` step 4) — then re-read it. `audit-diff` never
+   `language`, `model` (default `"sonnet"` if absent — an older config written before
+   this field existed), `lensesPointer`, default `.16-eyes/lenses.json`). **Read the
+   lenses file. If it doesn't exist, run the Auto-bootstrap flow from `init-flow.md`
+   now** (identical to `audit-flow.md` step 4) — then re-read it. `audit-diff` never
    designs its own lenses; it only ever reuses the persisted set.
 
 5. **Call the `Workflow` tool** with `script` set to the *exact* contents of the code
    block below, and `args: { today, base, head: 'HEAD', prNumber, changedFiles,
-   diffText, profile, lenses, depth, votesPerFinding, language }` (`profile` is
+   diffText, profile, lenses, depth, votesPerFinding, language, model }` (`profile` is
    `{ languages, domain_summary }` from the lenses file, same as `audit-flow.md`).
    This IS the user's explicit opt-in to multi-agent orchestration.
 
@@ -300,6 +301,8 @@ const configVotes =
 const language = args && T[args.language] ? args.language : 'en'
 const L = T[language]
 const languageName = LANGUAGE_NAMES[language]
+const modelPolicy = args && typeof args.model === 'string' ? args.model : 'sonnet'
+const modelOpt = modelPolicy !== 'default' ? { model: modelPolicy } : {}
 
 const scopeLabel = prNumber ? `PR #${prNumber}` : `${base}..${head}`
 
@@ -333,7 +336,7 @@ phase('Lenses')
 const seenKeys = new Set()
 const perLensVerified = await pipeline(
   lenses,
-  (lens) => agent(diffLensPrompt(lens), { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}`, model: 'sonnet' }),
+  (lens) => agent(diffLensPrompt(lens), { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}`, ...modelOpt }),
   (raw, lens) => {
     const findings = (raw?.findings || []).filter((f) => f && f.title && f.file)
     const fresh = findings.filter((f) => {
@@ -351,7 +354,7 @@ const perLensVerified = await pipeline(
           schema: VERDICT_SCHEMA,
           phase: 'Verification',
           label: `verify:${lens.name}`,
-          model: 'sonnet',
+          ...modelOpt,
         }).then((v) => {
           const corrupted = !v || looksCorrupted(v)
           return { ...f, lens: lens.name, verdict: corrupted ? null : v, verdict_corrupted: corrupted }
@@ -388,7 +391,7 @@ const adversarial = await parallel(
           schema: REFUTE_SCHEMA,
           phase: 'Adversarial review',
           label: `refute:${f.lens}:${i}`,
-          model: 'sonnet',
+          ...modelOpt,
         }),
       ),
     ).then((votes) => {
@@ -420,7 +423,7 @@ const execSummaryOut = await agent(
 - ${refutedHighImpact.length} high-impact finding(s) were refuted by adversarial review and dropped.
 - ${safeFindings.length} findings are SAFE to fix mechanically (no behavior change); ${riskyFindings.length} are RISKY (need a product/human decision before fixing).
 Do not list individual findings — just the shape of the result and what the reader should do next. Mention explicitly that this only reviewed the diff, not the whole repository.`,
-  { schema: EXEC_SUMMARY_SCHEMA, phase: 'Synthesis', label: 'exec-summary', model: 'sonnet' },
+  { schema: EXEC_SUMMARY_SCHEMA, phase: 'Synthesis', label: 'exec-summary', ...modelOpt },
 )
 const execSummary = execSummaryOut?.summary || ''
 
