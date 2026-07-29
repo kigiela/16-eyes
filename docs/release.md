@@ -42,6 +42,10 @@ Requires npm CLI ≥ 11.5.1 and Node ≥ 22.14.0, which is why the workflow pins
    - Publishes to npm via Trusted Publishing — npm mints provenance automatically as
      part of that OIDC flow, tying the published package back to this exact GitHub
      Actions run and commit.
+   - Force-moves the major-version tag (`v1`, `v2`, ...) to this release's commit. This
+     is what `uses: kigiela/16-eyes@v1` (in the published Action and every CI template)
+     actually resolves to — without this step that tag would be stuck at whatever commit
+     it was last pushed to, or wouldn't exist at all.
 
 ## If it fails
 

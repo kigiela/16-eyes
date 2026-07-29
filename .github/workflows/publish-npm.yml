@@ -22,7 +22,7 @@ on:
         required: true
 
 permissions:
-  contents: read
+  contents: write # also needed to move the major-version tag (vN) after each release
   id-token: write # required for OIDC trusted publishing
 
 jobs:
@@ -66,3 +66,19 @@ jobs:
 
       - name: Publish to npm
         run: npm publish --access public
+
+      - name: Move the major-version tag (vN) to this release
+        # kigiela/16-eyes@v1 is what the published Action / CI templates tell
+        # consumers to use. GitHub doesn't maintain that rolling major tag on
+        # its own — without this step it's stuck at whatever commit it was
+        # last force-pushed to (or doesn't exist at all).
+        env:
+          TAG_NAME: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+        run: |
+          set -euo pipefail
+          MAJOR="${TAG_NAME%%.*}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -f "$MAJOR" HEAD
+          git push origin "refs/tags/$MAJOR" --force
+          echo "Moved $MAJOR -> $TAG_NAME ($(git rev-parse HEAD))"
