@@ -99,7 +99,8 @@ Dentro de Claude Code, en cualquier repositorio:
 las reutilizan en vez de rediseñarlas desde cero en cada ejecución. Si lo omites,
 cualquiera de los dos comandos hace el bootstrap automáticamente (sin preguntas, seguro
 en CI); ejecútalo explícitamente antes si quieres personalizar patrones de exclusión,
-ubicación de salida, profundidad o idioma antes de que eso ocurra. `audit` es de solo
+ubicación de salida, profundidad, idioma, o qué modelo usan las llamadas de subagente del
+pipeline, antes de que eso ocurra. `audit` es de solo
 lectura y puede tardar unos minutos (decenas de llamadas a subagentes) — es lo esperado
 para un barrido de todo el repositorio; `audit-diff` es mucho más barato por estar
 limitado a un diff. `fix` nunca hace commit ni push; siempre deja los cambios en tu

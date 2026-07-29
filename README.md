@@ -95,7 +95,8 @@ Inside Claude Code, in any repository:
 both reuse them instead of redesigning from scratch every run. Skip it and either
 command bootstraps it automatically the first time (no questions asked, safe in CI);
 run it explicitly first if you want to customize exclude patterns, output location,
-depth, or language before that happens. `audit` is read-only and can take a few minutes
+depth, language, or which model the pipeline's subagent calls use before that happens.
+`audit` is read-only and can take a few minutes
 (dozens of subagent calls) — expected for a full-repo sweep; `audit-diff` is much
 cheaper since it's scoped to a diff. `fix` never commits or pushes; it always leaves
 changes in your working tree for you to review.

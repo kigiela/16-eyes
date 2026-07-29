@@ -65,6 +65,15 @@ Ask briefly (don't turn this into a long form — a few grouped questions is fin
    `/16-eyes audit-diff` automatically on every PR (see `references/ci-flow.md` for what
    this writes and where). Default to **no** if unsure — this touches
    `.github/workflows/`, which shouldn't happen as a side effect of an unrelated yes.
+7. **Model for the audit pipeline** — ask which model every subagent call (lens
+   investigation, verification, adversarial review, synthesis) should use:
+   - **Sonnet** (recommended, the default) — pinned regardless of the invoking session's
+     own model, so a full audit's dozens of subagent calls stay cost-predictable.
+   - **Claude Code's own default** — inherit whatever model the invoking session itself
+     is on for every subagent call (cost and quality then follow the user's own
+     per-session model choice, including Opus if that's what they're on).
+   - **A specific model** other than Sonnet — Opus (highest quality, most expensive) or
+     Haiku (cheapest and fastest, lower quality). Ask which if they pick this option.
 
 ### Phase 4 — Confirm
 
@@ -75,7 +84,7 @@ calls, well under a minute) — get a single go-ahead before doing either.
 ### Phase 5 — Design lenses & write
 
 1. **Call the `Workflow` tool** with `script` set to the exact contents of the code block
-   in "The lens-design workflow script" below, and `args: { excludePatterns, depth }`
+   in "The lens-design workflow script" below, and `args: { excludePatterns, depth, model }`
    from the Phase 3 answers. This is the user's explicit opt-in to multi-agent
    orchestration (the user invoking `/16-eyes init` is the consent) — do not ask again.
 2. **Write `.16-eyes/config.json`**, matching this shape (documented formally in
@@ -87,6 +96,7 @@ calls, well under a minute) — get a single go-ahead before doing either.
      "version": 1,
      "depth": "thorough",
      "language": "en",
+     "model": "sonnet",
      "excludePatterns": [
        "node_modules/**",
        "dist/**",
@@ -129,6 +139,8 @@ calls, well under a minute) — get a single go-ahead before doing either.
    pattern to the repo's `.gitignore` (create it if it doesn't exist, append if it does —
    never overwrite an existing `.gitignore`). If they said yes to the CI template
    question, set `ci.enabled: true` and follow `references/ci-flow.md` now to scaffold it.
+   Set `model` to whatever they picked in question 7: `"sonnet"` (the recommended
+   default), `"default"` (Claude Code's own session model), `"opus"`, or `"haiku"`.
 3. **Write `.16-eyes/lenses.json`**:
    ```json
    {
@@ -152,18 +164,20 @@ interview, never wait for confirmation** — this must complete unattended, incl
 inside a headless CI run with no human in the loop.
 
 1. **If `.16-eyes/config.json` already exists**, read it and reuse its `excludePatterns`/
-   `depth` as-is for lens design below — don't touch anything else in it, don't ask
-   about it. If `lensesPointer` is missing from it, add the default
-   (`.16-eyes/lenses.json`) when you write config back out at the end of this step.
+   `depth`/`model` as-is for lens design below — don't touch anything else in it, don't
+   ask about it. If `lensesPointer` is missing from it, add the default
+   (`.16-eyes/lenses.json`) when you write config back out at the end of this step. If
+   `model` is missing from it (a config written before this field existed), add the
+   default (`"sonnet"`) when you write config back out too.
 2. **If `.16-eyes/config.json` doesn't exist**, run Phase 2's inventory automatically
    (gate detection, output-location detection) and write `.16-eyes/config.json` with the
    Phase 5 shape above, using every documented default verbatim (`excludePatterns`
    default set, `output.dir` = `docs/`-or-root per Phase 2, `depth: "thorough"`,
-   `language: "en"`, `output.gitignoreReports: false`, `ci: { enabled: false, failOn:
-   "none", commentOnPr: true }`, `adversarial.votesPerFinding: 3`) — no interview, no
-   confirmation step.
+   `language: "en"`, `model: "sonnet"`, `output.gitignoreReports: false`, `ci: { enabled:
+   false, failOn: "none", commentOnPr: true }`, `adversarial.votesPerFinding: 3`) — no
+   interview, no confirmation step.
 3. **Call the same `Workflow` script** as Standard mode Phase 5 step 1, with whatever
-   `excludePatterns`/`depth` resulted from step 1 or 2 above.
+   `excludePatterns`/`depth`/`model` resulted from step 1 or 2 above.
 4. **Write `.16-eyes/lenses.json`** exactly as in Standard mode Phase 5 step 3.
 5. **Return control** to whichever command triggered this (`audit`/`audit-diff`) and
    continue its own flow immediately — don't stop here. That command's own final summary
@@ -214,6 +228,8 @@ const LENSES_SCHEMA = {
 
 const excludePatterns = (args && Array.isArray(args.excludePatterns) && args.excludePatterns) || []
 const depth = args && args.depth === 'quick' ? 'quick' : 'thorough'
+const modelPolicy = args && typeof args.model === 'string' ? args.model : 'sonnet'
+const modelOpt = modelPolicy !== 'default' ? { model: modelPolicy } : {}
 
 const excludeNote = excludePatterns.length
   ? `\n\nDo not investigate or report findings under these excluded paths (vendored/generated/fixtures, already reviewed as out of scope): ${excludePatterns.join(', ')}.`
@@ -231,7 +247,7 @@ const profile = await agent(
 - a short domain summary (what this application/service actually does, for whom)
 - a short architecture summary (monolith vs services, frontend/backend split, datastores, deploy target)
 - risk_relevant_subsystems: a list of specific things THIS repo has that matter for security (e.g. "handles payment/money movement", "has public webhooks", "calls an LLM with user-controlled input", "parses uploaded files", "has its own auth/session system", "runs SQL built from user input somewhere", "has an admin/internal-only surface", "is a monorepo with N packages") — be concrete and specific to what you actually find, not a generic list.${excludeNote}`,
-  { schema: PROFILE_SCHEMA, phase: 'Profile', label: 'profile', model: 'sonnet' },
+  { schema: PROFILE_SCHEMA, phase: 'Profile', label: 'profile', ...modelOpt },
 )
 log(
   `Profile: ${(profile?.languages || []).join(', ')} · ${(profile?.risk_relevant_subsystems || []).length} risk-relevant subsystem(s) identified`,
@@ -265,7 +281,7 @@ Produce a list of investigation LENSES — each one a specific, non-overlapping 
 Aim for as many lenses as the repo's actual distinct surface area warrants — a small single-purpose service might need 6-8, a large multi-domain backend might need 18-20. Do NOT pad with redundant/near-duplicate lenses just to hit a round number, and do NOT skip a real distinct area to save calls.
 
 For each lens, write: a short "name" (slug-like), a one-line "focus" description, and a full "prompt" — the COMPLETE instructions you'd hand to an independent subagent with no other context, telling it exactly what to explore (which kind of files/patterns to grep for, what to read) and what to return: a list of findings, each with title, file, line (best-effort), description of the concrete issue, and an initial impact/probability guess. Tell each lens agent to anchor every finding to a real file:line it actually read — no speculation about code it didn't look at. Each lens's "prompt" you write MUST also tell that lens agent not to investigate the excluded paths below, if any. Since this same lens may later run scoped to just a diff instead of the whole repo, phrase the prompt so it still makes sense when told "investigate only within these changed files/hunks" — i.e., don't hard-code "explore the whole repo" as the only mode of operation.${excludeNote}${depthNote}`,
-  { schema: LENSES_SCHEMA, phase: 'Lens design', label: 'lens-design', model: 'sonnet' },
+  { schema: LENSES_SCHEMA, phase: 'Lens design', label: 'lens-design', ...modelOpt },
 )
 const lenses = (lensDesign?.lenses || []).filter((l) => l && l.prompt && l.name)
 log(`${lenses.length} lens(es) designed: ${lenses.map((l) => l.name).join(', ')}`)

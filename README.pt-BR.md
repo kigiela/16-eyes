@@ -97,8 +97,9 @@ Dentro do Claude Code, em qualquer repositório:
 `init` desenha e persiste as lentes de investigação do repo — `audit` e `audit-diff`
 reaproveitam em vez de redesenhar do zero a cada execução. Se pular, qualquer um dos
 dois faz o bootstrap automático (sem perguntas, seguro em CI); rode explicitamente
-antes se quiser customizar padrões de exclusão, local de saída, profundidade ou idioma
-antes disso acontecer. `audit` é somente leitura e pode levar alguns minutos (dezenas de
+antes se quiser customizar padrões de exclusão, local de saída, profundidade, idioma, ou
+qual model as chamadas de subagente do pipeline usam, antes disso acontecer. `audit` é
+somente leitura e pode levar alguns minutos (dezenas de
 chamadas de subagente) — esperado pra um sweep do repositório inteiro; `audit-diff` é
 bem mais barato por ser escopado a um diff. `fix` nunca commita nem dá push; sempre
 deixa as mudanças na working tree pra você revisar.

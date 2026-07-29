@@ -11,8 +11,9 @@ Read-only. Never edits code.
    persisted lens.
 3. **Read `.16-eyes/config.json`** if it exists (via the `Read` tool — the Workflow script
    itself has no filesystem access). Extract `depth`, `adversarial.votesPerFinding`,
-   `language`, and `lensesPointer` (default `.16-eyes/lenses.json`). If the file is
-   absent, proceed with documented defaults.
+   `language`, `model` (default `"sonnet"` if absent — an older config written before
+   this field existed), and `lensesPointer` (default `.16-eyes/lenses.json`). If the file
+   is absent, proceed with documented defaults.
 4. **Read the lenses file** at `lensesPointer`. **If it doesn't exist, run the
    Auto-bootstrap flow from `init-flow.md` now** — this creates `.16-eyes/config.json`
    (if that was also missing) and `.16-eyes/lenses.json` non-interactively, then
@@ -21,7 +22,7 @@ Read-only. Never edits code.
    the spot.
 5. **Call the `Workflow` tool** with `script` set to the *exact* contents of the code block
    below (copy it verbatim — do not paraphrase or "improve" it inline), and
-   `args: { today, focus, profile, lenses, depth, votesPerFinding, language }`, where
+   `args: { today, focus, profile, lenses, depth, votesPerFinding, language, model }`, where
    `profile` is `{ languages, domain_summary }` read straight from the lenses file (not
    re-derived) and `lenses` is that file's `lenses` array verbatim. This IS the user's
    explicit opt-in to multi-agent orchestration — the user invoking this named skill is
@@ -294,6 +295,8 @@ const configVotes =
 const language = args && T[args.language] ? args.language : 'en'
 const L = T[language]
 const languageName = LANGUAGE_NAMES[language]
+const modelPolicy = args && typeof args.model === 'string' ? args.model : 'sonnet'
+const modelOpt = modelPolicy !== 'default' ? { model: modelPolicy } : {}
 
 const allLenses = ((args && Array.isArray(args.lenses) && args.lenses) || []).filter((l) => l && l.prompt && l.name)
 if (allLenses.length === 0) {
@@ -313,7 +316,7 @@ if (focus) {
   log(`Selecting which of the ${allLenses.length} persisted lens(es) are relevant to focus: "${focus}"...`)
   const selection = await agent(
     `Given this focus area for a security review: "${focus}", and this list of available investigation lenses (name — focus), select every lens that's plausibly relevant. Be inclusive when in doubt — a lens can stay even if only partially relevant, but leave out ones with clearly no connection.\n\n${allLenses.map((l) => `- ${l.name} — ${l.focus}`).join('\n')}`,
-    { schema: LENS_SELECTION_SCHEMA, phase: 'Lens selection', label: 'lens-selection', model: 'sonnet' },
+    { schema: LENS_SELECTION_SCHEMA, phase: 'Lens selection', label: 'lens-selection', ...modelOpt },
   )
   const selectedNames = new Set((selection?.selectedLensNames || []).map((n) => String(n)))
   const filtered = allLenses.filter((l) => selectedNames.has(l.name))
@@ -331,7 +334,7 @@ phase('Lenses')
 const seenKeys = new Set() // dedup by order of arrival across concurrent lenses — cost-only, not a correctness guarantee
 const perLensVerified = await pipeline(
   lenses,
-  (lens) => agent(lens.prompt, { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}`, model: 'sonnet' }),
+  (lens) => agent(lens.prompt, { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}`, ...modelOpt }),
   (raw, lens) => {
     const findings = (raw?.findings || []).filter((f) => f && f.title && f.file)
     const fresh = findings.filter((f) => {
@@ -349,7 +352,7 @@ const perLensVerified = await pipeline(
           schema: VERDICT_SCHEMA,
           phase: 'Verification',
           label: `verify:${lens.name}`,
-          model: 'sonnet',
+          ...modelOpt,
         }).then((v) => {
           const corrupted = !v || looksCorrupted(v)
           return { ...f, lens: lens.name, verdict: corrupted ? null : v, verdict_corrupted: corrupted }
@@ -388,7 +391,7 @@ const adversarial = await parallel(
           schema: REFUTE_SCHEMA,
           phase: 'Adversarial review',
           label: `refute:${f.lens}:${i}`,
-          model: 'sonnet',
+          ...modelOpt,
         }),
       ),
     ).then((votes) => {
@@ -421,7 +424,7 @@ const execSummaryOut = await agent(
 - ${refutedHighImpact.length} high-impact finding(s) were refuted by adversarial review and dropped.
 - ${safeFindings.length} findings are SAFE to fix mechanically (no behavior change); ${riskyFindings.length} are RISKY (need a product/human decision before fixing).
 Do not list individual findings — just the shape of the result and what the reader should do next (review the risky findings, decide on each; safe ones can be applied directly).`,
-  { schema: EXEC_SUMMARY_SCHEMA, phase: 'Synthesis', label: 'exec-summary', model: 'sonnet' },
+  { schema: EXEC_SUMMARY_SCHEMA, phase: 'Synthesis', label: 'exec-summary', ...modelOpt },
 )
 const execSummary = execSummaryOut?.summary || ''
 
