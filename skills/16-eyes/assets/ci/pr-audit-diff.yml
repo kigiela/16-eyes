@@ -28,7 +28,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           # audit-diff needs `git merge-base` against the base branch, which
           # needs real history, not a 1-commit shallow clone.
