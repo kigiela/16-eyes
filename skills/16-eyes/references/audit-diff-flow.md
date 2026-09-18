@@ -44,9 +44,20 @@ code nobody touched recently.
 4. **Read `.16-eyes/config.json`** (`depth`, `adversarial.votesPerFinding`,
    `language`, `model` (default `"sonnet"` if absent — an older config written before
    this field existed), `lensesPointer`, default `.16-eyes/lenses.json`). **Read the
-   lenses file. If it doesn't exist, run the Auto-bootstrap flow from `init-flow.md`
-   now** (identical to `audit-flow.md` step 4) — then re-read it. `audit-diff` never
-   designs its own lenses; it only ever reuses the persisted set.
+   lenses file. If it doesn't exist:**
+   - **Interactive session** (a human is present and can respond right now — not a
+     headless `claude -p` run, not CI): stop and tell the user plainly that no
+     investigation lenses exist yet for this repo, that this would be a first-time,
+     un-reviewed default setup (thorough depth, sonnet model), and that continuing
+     means auto-bootstrapping those defaults and then immediately running the diff
+     review. Ask for an explicit go-ahead before doing either; mention `/16-eyes init`
+     as the alternative. This is a one-time gate — once `.16-eyes/lenses.json` exists,
+     later runs never ask this again. (Identical gate to `audit-flow.md` step 4.)
+   - **Headless/CI** (no human can respond — the common case for `audit-diff` in a PR
+     check): skip the question — run the Auto-bootstrap flow from `init-flow.md`
+     immediately, exactly as today.
+   - Either way, once bootstrapped, re-read the lenses file. `audit-diff` never
+     designs its own lenses; it only ever reuses the persisted set.
 
 5. **Call the `Workflow` tool** with `script` set to the *exact* contents of the code
    block below, and `args: { today, base, head: 'HEAD', prNumber, changedFiles,
@@ -77,7 +88,13 @@ export const meta = {
   name: '16-eyes-audit-diff',
   description:
     "Run a repo's persisted investigation lenses scoped to a diff, verify every finding, adversarially review high-impact ones, and produce a classified report.",
-  phases: [{ title: 'Lenses' }, { title: 'Verification' }, { title: 'Adversarial review' }, { title: 'Synthesis' }],
+  phases: [
+    { title: 'Preflight' },
+    { title: 'Lenses' },
+    { title: 'Verification' },
+    { title: 'Adversarial review' },
+    { title: 'Synthesis' },
+  ],
 }
 
 // ── Schemas (identical to audit-flow.md — keep them in sync) ──────────────
@@ -315,6 +332,27 @@ if (lenses.length === 0) {
   }
 }
 
+// ── Model preflight — fail fast, never let a broken model masquerade as a
+// clean "0 findings" review. Runs before any lens/verify/adversarial fan-out.
+phase('Preflight')
+const PREFLIGHT_SCHEMA = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] }
+const preflight = await agent('Reply with exactly {"ok": true}.', {
+  schema: PREFLIGHT_SCHEMA,
+  phase: 'Preflight',
+  label: 'model-preflight',
+  ...modelOpt,
+})
+if (!preflight || preflight.ok !== true) {
+  return {
+    reportMarkdown: `# 16 Eyes — diff review — ${today}\n\nAborted: the configured model (\`${modelPolicy}\`) failed a preflight check before any investigation ran — this is NOT a clean review, no lenses ran. Fix \`model\` in \`.16-eyes/config.json\` (or re-run \`/16-eyes init\`) and try again.`,
+    reportJson: JSON.stringify({ error: 'model-preflight-failed', model: modelPolicy }, null, 2),
+    stats: null,
+  }
+}
+log(
+  `Model preflight ok (${modelPolicy}). Estimate: ${lenses.length} lens agent(s), 1 verification per finding they report (uncapped), up to ${configVotes ?? (depth === 'quick' ? 1 : 3)} adversarial vote(s) per high-impact finding.`,
+)
+
 function diffLensPrompt(lens) {
   return `You are reviewing ONLY a diff (${scopeLabel}) as part of a security review — not the whole repository. Your focus area: "${lens.focus}".
 
@@ -334,10 +372,16 @@ Investigate ONLY within these changed hunks, from your focus area above. You may
 // ── Lenses → verification (pipeline, no barrier) ──────────────────────────
 phase('Lenses')
 const seenKeys = new Set()
+let lensFailures = 0
 const perLensVerified = await pipeline(
   lenses,
   (lens) => agent(diffLensPrompt(lens), { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}`, ...modelOpt }),
   (raw, lens) => {
+    if (!raw) {
+      lensFailures++
+      log(`${lens.name}: lens agent call failed or returned nothing — skipped, NOT counted as "found nothing"`)
+      return []
+    }
     const findings = (raw?.findings || []).filter((f) => f && f.title && f.file)
     const fresh = findings.filter((f) => {
       const k = dedupKey(f)
@@ -363,14 +407,31 @@ const perLensVerified = await pipeline(
     )
   },
 )
+// guard: every lens failing must NOT read as "reviewed the diff, found nothing" —
+// the exact failure mode that produced a false-clean report in a real run (bad
+// configured model → every subagent call failed → report said "0 findings").
+if (lensFailures > 0 && lensFailures === lenses.length) {
+  return {
+    reportMarkdown: `# 16 Eyes — diff review — ${today}\n\nAborted: all ${lenses.length} lens agent(s) failed mid-run (model: \`${modelPolicy}\`) — this is NOT a clean review. Check the configured model in \`.16-eyes/config.json\` and try again.`,
+    reportJson: JSON.stringify({ error: 'all-lenses-failed', model: modelPolicy, lensFailures }, null, 2),
+    stats: null,
+  }
+}
 const allVerified = perLensVerified.flat().filter(Boolean)
 
 const corrupted = allVerified.filter((f) => f.verdict_corrupted)
 const needsVerdict = allVerified.filter((f) => !f.verdict_corrupted && f.verdict)
 const realFindings = needsVerdict.filter((f) => f.verdict.is_real)
 const falsePositives = needsVerdict.filter((f) => !f.verdict.is_real)
+// same guard for verification: every verify call failing/corrupted must not
+// silently pass through as "0 real, 0 false-positive" — flag it loudly instead.
+if (allVerified.length > 0 && corrupted.length === allVerified.length) {
+  log(
+    `WARNING: all ${allVerified.length} verification call(s) failed or returned corrupted output — every finding below is unverified.`,
+  )
+}
 log(
-  `${allVerified.length} unique finding(s) verified: ${realFindings.length} real, ${falsePositives.length} false-positive, ${corrupted.length} corrupted/failed verification (manual review)`,
+  `${allVerified.length} unique finding(s) verified: ${realFindings.length} real, ${falsePositives.length} false-positive, ${corrupted.length} corrupted/failed verification (manual review)${lensFailures > 0 ? ` — ${lensFailures}/${lenses.length} lens(es) failed and were skipped` : ''}`,
 )
 
 // ── Adversarial review (high impact only) ────────────────────────────────
@@ -380,8 +441,13 @@ const otherImpact = realFindings.filter((f) => f.verdict.impact !== 'high')
 
 const baseVotes = configVotes ?? (depth === 'quick' ? 1 : 3)
 const votesPerFinding = budget.total && budget.remaining() < 200_000 ? 1 : baseVotes
-if (highImpact.length > 0)
-  log(`Adversarial review: ${highImpact.length} high-impact finding(s), ${votesPerFinding} refuter(s) each`)
+if (highImpact.length > 0) {
+  const budgetNote =
+    votesPerFinding < baseVotes && budget.total
+      ? ` (reduced from ${baseVotes} — budget running low: ~${Math.round((budget.remaining() / budget.total) * 100)}% remaining)`
+      : ''
+  log(`Adversarial review: ${highImpact.length} high-impact finding(s), ${votesPerFinding} refuter(s) each${budgetNote}`)
+}
 
 const adversarial = await parallel(
   highImpact.map((f) => () =>
@@ -541,6 +607,10 @@ return { reportMarkdown, reportJson, stats }
   `audit-flow.md` on purpose — keep the two in sync if either changes. The only real
   difference is `diffLensPrompt()`, which wraps each persisted lens's own prompt with
   the diff content and an instruction to stay inside it.
+- **Model preflight + the lens/verify all-failed guards** mirror `audit-flow.md`
+  exactly (same real incident: a misconfigured `model` failed every subagent call and
+  the script reported a clean "0 achados" review instead of an error). Never regress
+  either here without regressing them there too.
 - **Diff gathering happens outside the Workflow script** (step 2-3 of "When invoked"),
   same reason as `audit-flow.md`: the tool has no filesystem/git access, so `git diff`/
   `gh pr diff` output has to be fetched by the orchestrating agent and passed in via
