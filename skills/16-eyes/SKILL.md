@@ -61,9 +61,11 @@ depth / language / whether to gitignore reports / whether to scaffold a CI
 template, then **profiles the repo and designs its investigation lenses**,
 persisting both to `.16-eyes/config.json` and `.16-eyes/lenses.json`. If
 skipped, `/16-eyes audit` and `/16-eyes audit-diff` both auto-bootstrap this
-non-interactively (sane defaults, no questions asked — safe to run headlessly
-in CI) the first time they need lenses that don't exist yet. Running it
-explicitly first just lets you customize things before that happens.
+with sane defaults the first time they need lenses that don't exist yet —
+non-interactively, no questions asked, in a headless/CI run, but with a
+one-time "ok to proceed?" confirmation first in an interactive session (never
+asked again once lenses exist). Running `/16-eyes init` explicitly first just
+lets you customize things before that happens.
 
 ## When the user runs `/16-eyes audit`
 

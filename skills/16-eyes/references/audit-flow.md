@@ -14,12 +14,25 @@ Read-only. Never edits code.
    `language`, `model` (default `"sonnet"` if absent — an older config written before
    this field existed), and `lensesPointer` (default `.16-eyes/lenses.json`). If the file
    is absent, proceed with documented defaults.
-4. **Read the lenses file** at `lensesPointer`. **If it doesn't exist, run the
-   Auto-bootstrap flow from `init-flow.md` now** — this creates `.16-eyes/config.json`
-   (if that was also missing) and `.16-eyes/lenses.json` non-interactively, then
-   re-read both. Never invent lenses yourself, and never skip this step: `audit` always
-   runs against a persisted, previously-designed lens set, never a set it improvises on
-   the spot.
+4. **Read the lenses file** at `lensesPointer`. **If it doesn't exist:**
+   - **Interactive session** (a human is present and can respond right now — not a
+     headless `claude -p` run, not CI): stop and tell the user plainly that no
+     investigation lenses exist yet for this repo, that this would be a first-time,
+     un-reviewed default setup (thorough depth, sonnet model — see `init-flow.md`'s
+     Auto-bootstrap mode), and that continuing means auto-bootstrapping those defaults
+     and then immediately running a full-repo sweep (dozens of agent calls, several
+     minutes). Ask for an explicit go-ahead before doing either; mention `/16-eyes
+     init` as the alternative if they'd rather customize first. This is a one-time
+     gate — once `.16-eyes/lenses.json` exists, later `audit`/`audit-diff` runs never
+     ask this again.
+   - **Headless/CI** (no human can respond): skip the question — run the
+     Auto-bootstrap flow from `init-flow.md` immediately, exactly as today. This must
+     complete unattended.
+   - Either way, once bootstrapped, this creates `.16-eyes/config.json` (if that was
+     also missing) and `.16-eyes/lenses.json` non-interactively, then re-read both.
+     Never invent lenses yourself, and never skip this step: `audit` always runs
+     against a persisted, previously-designed lens set, never a set it improvises on
+     the spot.
 5. **Call the `Workflow` tool** with `script` set to the *exact* contents of the code block
    below (copy it verbatim — do not paraphrase or "improve" it inline), and
    `args: { today, focus, profile, lenses, depth, votesPerFinding, language, model }`, where
@@ -56,6 +69,7 @@ export const meta = {
   description:
     "Run a repo's persisted investigation lenses across the whole codebase, verify every finding, adversarially review high-impact ones, and produce a classified report.",
   phases: [
+    { title: 'Preflight' },
     { title: 'Lens selection' },
     { title: 'Lenses' },
     { title: 'Verification' },
@@ -307,6 +321,27 @@ if (allLenses.length === 0) {
   }
 }
 
+// ── Model preflight — fail fast, never let a broken model masquerade as a
+// clean "0 findings" audit. Runs before any lens/verify/adversarial fan-out.
+phase('Preflight')
+const PREFLIGHT_SCHEMA = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] }
+const preflight = await agent('Reply with exactly {"ok": true}.', {
+  schema: PREFLIGHT_SCHEMA,
+  phase: 'Preflight',
+  label: 'model-preflight',
+  ...modelOpt,
+})
+if (!preflight || preflight.ok !== true) {
+  return {
+    reportMarkdown: `# 16 Eyes — ${today}\n\nAborted: the configured model (\`${modelPolicy}\`) failed a preflight check before any investigation ran — this is NOT a clean audit, no lenses ran. Fix \`model\` in \`.16-eyes/config.json\` (or re-run \`/16-eyes init\`) and try again.`,
+    reportJson: JSON.stringify({ error: 'model-preflight-failed', model: modelPolicy }, null, 2),
+    stats: null,
+  }
+}
+log(
+  `Model preflight ok (${modelPolicy}). Estimate: ${allLenses.length} lens agent(s), 1 verification per finding they report (uncapped), up to ${configVotes ?? (depth === 'quick' ? 1 : 3)} adversarial vote(s) per high-impact finding — expect tens of agent calls for a thorough run.`,
+)
+
 // ── Optional focus-based lens selection (lenses themselves are fixed —
 // designed once by /16-eyes init — a per-invocation "focus" narrows WHICH
 // of them run this time, it never redesigns any) ──────────────────────────
@@ -332,10 +367,16 @@ if (focus) {
 // as it finishes, without waiting for the others) ────────────────────────
 phase('Lenses')
 const seenKeys = new Set() // dedup by order of arrival across concurrent lenses — cost-only, not a correctness guarantee
+let lensFailures = 0
 const perLensVerified = await pipeline(
   lenses,
   (lens) => agent(lens.prompt, { schema: FINDINGS_SCHEMA, phase: 'Lenses', label: `lens:${lens.name}`, ...modelOpt }),
   (raw, lens) => {
+    if (!raw) {
+      lensFailures++
+      log(`${lens.name}: lens agent call failed or returned nothing — skipped, NOT counted as "found nothing"`)
+      return []
+    }
     const findings = (raw?.findings || []).filter((f) => f && f.title && f.file)
     const fresh = findings.filter((f) => {
       const k = dedupKey(f)
@@ -361,14 +402,31 @@ const perLensVerified = await pipeline(
     )
   },
 )
+// guard: every lens failing must NOT read as "swept the repo, found nothing" —
+// the exact failure mode that produced a false-clean report in a real run (bad
+// configured model → every subagent call failed → report said "0 findings").
+if (lensFailures > 0 && lensFailures === lenses.length) {
+  return {
+    reportMarkdown: `# 16 Eyes — ${today}\n\nAborted: all ${lenses.length} lens agent(s) failed mid-run (model: \`${modelPolicy}\`) — this is NOT a clean audit. Check the configured model in \`.16-eyes/config.json\` and try again.`,
+    reportJson: JSON.stringify({ error: 'all-lenses-failed', model: modelPolicy, lensFailures }, null, 2),
+    stats: null,
+  }
+}
 const allVerified = perLensVerified.flat().filter(Boolean)
 
 const corrupted = allVerified.filter((f) => f.verdict_corrupted)
 const needsVerdict = allVerified.filter((f) => !f.verdict_corrupted && f.verdict)
 const realFindings = needsVerdict.filter((f) => f.verdict.is_real)
 const falsePositives = needsVerdict.filter((f) => !f.verdict.is_real)
+// same guard for verification: every verify call failing/corrupted must not
+// silently pass through as "0 real, 0 false-positive" — flag it loudly instead.
+if (allVerified.length > 0 && corrupted.length === allVerified.length) {
+  log(
+    `WARNING: all ${allVerified.length} verification call(s) failed or returned corrupted output — every finding below is unverified.`,
+  )
+}
 log(
-  `${allVerified.length} unique finding(s) verified: ${realFindings.length} real, ${falsePositives.length} false-positive, ${corrupted.length} corrupted/failed verification (manual review)`,
+  `${allVerified.length} unique finding(s) verified: ${realFindings.length} real, ${falsePositives.length} false-positive, ${corrupted.length} corrupted/failed verification (manual review)${lensFailures > 0 ? ` — ${lensFailures}/${lenses.length} lens(es) failed and were skipped` : ''}`,
 )
 
 // ── Adversarial review (high impact only) ────────────────────────────────
@@ -380,8 +438,13 @@ const otherImpact = realFindings.filter((f) => f.verdict.impact !== 'high')
 // if the token budget is running low.
 const baseVotes = configVotes ?? (depth === 'quick' ? 1 : 3)
 const votesPerFinding = budget.total && budget.remaining() < 200_000 ? 1 : baseVotes
-if (highImpact.length > 0)
-  log(`Adversarial review: ${highImpact.length} high-impact finding(s), ${votesPerFinding} refuter(s) each`)
+if (highImpact.length > 0) {
+  const budgetNote =
+    votesPerFinding < baseVotes && budget.total
+      ? ` (reduced from ${baseVotes} — budget running low: ~${Math.round((budget.remaining() / budget.total) * 100)}% remaining)`
+      : ''
+  log(`Adversarial review: ${highImpact.length} high-impact finding(s), ${votesPerFinding} refuter(s) each${budgetNote}`)
+}
 
 const adversarial = await parallel(
   highImpact.map((f) => () =>
@@ -558,6 +621,14 @@ return { reportMarkdown, reportJson, stats }
   real bug: if every refuter agent failed (rate limit, transient error), the
   finding was treated as "survived" by default — meaning a finding could reach
   the final report with **zero** actual adversarial scrutiny. Never regress this.
+- **Model preflight + the lens/verify all-failed guards** exist because a real run
+  had a misconfigured `model` in `.16-eyes/config.json` (pointed at a model
+  unavailable in that environment): every subagent call failed, and the script —
+  before these guards existed — reported a clean "0 achados" audit instead of an
+  error. Preflight catches a broken model in one cheap call before any fan-out
+  starts; the lens/verify all-failed guards catch a model that degrades mid-run
+  instead of failing outright at the start. Never regress either — a security
+  audit that fails must say so loudly, never report clean.
 - **`looksCorrupted()`** exists because two real audit runs of this pattern
   returned a schema-valid object where every string field was the literal word
   `"test"` (stale cache / crossed fixture from a prior run). Schema validation

@@ -70,8 +70,10 @@ Ask briefly (don't turn this into a long form — a few grouped questions is fin
    - **Sonnet** (recommended, the default) — pinned regardless of the invoking session's
      own model, so a full audit's dozens of subagent calls stay cost-predictable.
    - **Claude Code's own default** — inherit whatever model the invoking session itself
-     is on for every subagent call (cost and quality then follow the user's own
-     per-session model choice, including Opus if that's what they're on).
+     is on for every subagent call. **Cost warning:** if the invoking session is on
+     Opus, this pins EVERY subagent call — potentially dozens per run — to Opus
+     pricing, not just this one conversation. Only pick this if you understand and want
+     that cost trade-off; when unsure, pick Sonnet instead.
    - **A specific model** other than Sonnet — Opus (highest quality, most expensive) or
      Haiku (cheapest and fastest, lower quality). Ask which if they pick this option.
 
@@ -87,6 +89,9 @@ calls, well under a minute) — get a single go-ahead before doing either.
    in "The lens-design workflow script" below, and `args: { excludePatterns, depth, model }`
    from the Phase 3 answers. This is the user's explicit opt-in to multi-agent
    orchestration (the user invoking `/16-eyes init` is the consent) — do not ask again.
+   **If the return value has an `error` field** (e.g. `model-preflight-failed`), stop
+   here — do not write `config.json`/`lenses.json`. Tell the user the configured model
+   failed a preflight check and point them at re-answering question 7 above.
 2. **Write `.16-eyes/config.json`**, matching this shape (documented formally in
    `../assets/config.schema.json`):
 
@@ -161,7 +166,11 @@ calls, well under a minute) — get a single go-ahead before doing either.
 Triggered the moment `/16-eyes audit` or `/16-eyes audit-diff` looks for
 `.16-eyes/lenses.json` (per `config.lensesPointer`) and doesn't find it. **Never
 interview, never wait for confirmation** — this must complete unattended, including
-inside a headless CI run with no human in the loop.
+inside a headless CI run with no human in the loop. (The one place a human interactive
+session now gets asked anything before this triggers is one level up, in `audit`'s or
+`audit-diff`'s own "When invoked" step 4 — a one-time "ok to auto-bootstrap and run?"
+gate before this function is even called. This function's own behavior is unchanged:
+once triggered, it still never interviews.)
 
 1. **If `.16-eyes/config.json` already exists**, read it and reuse its `excludePatterns`/
    `depth`/`model` as-is for lens design below — don't touch anything else in it, don't
@@ -177,7 +186,10 @@ inside a headless CI run with no human in the loop.
    false, failOn: "none", commentOnPr: true }`, `adversarial.votesPerFinding: 3`) — no
    interview, no confirmation step.
 3. **Call the same `Workflow` script** as Standard mode Phase 5 step 1, with whatever
-   `excludePatterns`/`depth`/`model` resulted from step 1 or 2 above.
+   `excludePatterns`/`depth`/`model` resulted from step 1 or 2 above. **If the return
+   value has an `error` field**, stop — do not write `lenses.json`. Return that error up
+   to whichever command triggered this (`audit`/`audit-diff`), which must abort with it
+   (its own model-preflight-failed handling) rather than proceeding as if lenses exist.
 4. **Write `.16-eyes/lenses.json`** exactly as in Standard mode Phase 5 step 3.
 5. **Return control** to whichever command triggered this (`audit`/`audit-diff`) and
    continue its own flow immediately — don't stop here. That command's own final summary
@@ -192,7 +204,7 @@ inside a headless CI run with no human in the loop.
 export const meta = {
   name: '16-eyes-lens-design',
   description: 'Profile a repo and design a tailored set of security investigation lenses, persisted for /16-eyes audit and /16-eyes audit-diff to reuse.',
-  phases: [{ title: 'Profile' }, { title: 'Lens design' }],
+  phases: [{ title: 'Preflight' }, { title: 'Profile' }, { title: 'Lens design' }],
 }
 
 const PROFILE_SCHEMA = {
@@ -230,6 +242,21 @@ const excludePatterns = (args && Array.isArray(args.excludePatterns) && args.exc
 const depth = args && args.depth === 'quick' ? 'quick' : 'thorough'
 const modelPolicy = args && typeof args.model === 'string' ? args.model : 'sonnet'
 const modelOpt = modelPolicy !== 'default' ? { model: modelPolicy } : {}
+
+// ── Model preflight — fail fast rather than silently persisting an empty/garbage
+// lenses.json that every future audit/audit-diff run would then hit blind.
+phase('Preflight')
+const PREFLIGHT_SCHEMA = { type: 'object', properties: { ok: { type: 'boolean' } }, required: ['ok'] }
+const preflight = await agent('Reply with exactly {"ok": true}.', {
+  schema: PREFLIGHT_SCHEMA,
+  phase: 'Preflight',
+  label: 'model-preflight',
+  ...modelOpt,
+})
+if (!preflight || preflight.ok !== true) {
+  return { profile: null, lenses: [], error: 'model-preflight-failed', model: modelPolicy }
+}
+log(`Model preflight ok (${modelPolicy}).`)
 
 const excludeNote = excludePatterns.length
   ? `\n\nDo not investigate or report findings under these excluded paths (vendored/generated/fixtures, already reviewed as out of scope): ${excludePatterns.join(', ')}.`
@@ -305,3 +332,8 @@ return { profile, lenses }
   mode's Phase 3/4, it would hang waiting for input that will never come. Auto-bootstrap
   is what makes `audit-diff` safe to wire into CI on a repo that never ran `/16-eyes
   init` first.
+- **Model preflight** (`{ error: 'model-preflight-failed' }` return) mirrors the same
+  guard in `audit-flow.md`/`audit-diff-flow.md` — same real incident: a misconfigured
+  `model` failed every subagent call. Here the stakes are worse if unguarded: a failed
+  lens-design call would otherwise persist an empty or garbage `lenses.json` that every
+  future `audit`/`audit-diff` run silently inherits. Never regress this.
