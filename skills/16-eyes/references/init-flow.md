@@ -80,8 +80,10 @@ Ask briefly (don't turn this into a long form — a few grouped questions is fin
 ### Phase 4 — Confirm
 
 Show the user the exact `.16-eyes/config.json` you're about to write, **and** tell them
-you're about to profile the repo and design its investigation lenses (a handful of agent
-calls, well under a minute) — get a single go-ahead before doing either.
+you're about to profile the repo and design its investigation lenses — a handful of
+agent calls, but this can take several minutes for a large or complex repo (lens design
+alone commonly takes 5-10+ minutes; it is not stuck, it is genuinely doing a lot of
+reasoning) — get a single go-ahead before doing either.
 
 ### Phase 5 — Design lenses & write
 
@@ -238,6 +240,24 @@ const LENSES_SCHEMA = {
   required: ['lenses'],
 }
 
+// Planning only — name + focus, no prompt text. Kept deliberately tiny so
+// this call is fast and never risks the output-token limit on its own; full
+// prompt text is written separately, in small batches (see "Lens design").
+const PLAN_SCHEMA = {
+  type: 'object',
+  properties: {
+    lenses: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: { name: { type: 'string' }, focus: { type: 'string' } },
+        required: ['name', 'focus'],
+      },
+    },
+  },
+  required: ['lenses'],
+}
+
 const excludePatterns = (args && Array.isArray(args.excludePatterns) && args.excludePatterns) || []
 const depth = args && args.depth === 'quick' ? 'quick' : 'thorough'
 const modelPolicy = args && typeof args.model === 'string' ? args.model : 'sonnet'
@@ -281,8 +301,11 @@ log(
 )
 
 phase('Lens design')
-const lensDesign = await agent(
-  `You are designing the standing investigation plan for a repository's security audits (both full-repo and diff-scoped reviews will reuse this same plan), given this repo profile:
+log(
+  'Planning which investigation lenses this repo needs (names + focus only — full prompts are written next, in small batches, to avoid one huge non-interruptible call)...',
+)
+const plan = await agent(
+  `You are planning the standing investigation coverage for a repository's security audits (both full-repo and diff-scoped reviews will reuse this same plan), given this repo profile:
 
 Languages: ${(profile?.languages || []).join(', ')}
 Frameworks: ${(profile?.frameworks || []).join(', ')}
@@ -290,7 +313,7 @@ Domain: ${profile?.domain_summary}
 Architecture: ${profile?.architecture_summary}
 Risk-relevant subsystems found: ${(profile?.risk_relevant_subsystems || []).join('; ')}
 
-Produce a list of investigation LENSES — each one a specific, non-overlapping area an independent subagent will investigate in depth, either across the whole repo or scoped to a diff. Consider (include what applies, SKIP what doesn't, and ADD repo-specific ones not listed here):
+Decide which investigation LENSES this repo needs — each one a specific, non-overlapping area an independent subagent will later investigate in depth, either across the whole repo or scoped to a diff. Consider (include what applies, SKIP what doesn't, and ADD repo-specific ones not listed here):
 - authentication & session management
 - authorization / access control (roles, tenant isolation, IDOR)
 - injection surfaces per data sink (SQL/NoSQL/command/template) — one lens per DISTINCT sink technology if there's more than one
@@ -307,11 +330,59 @@ Produce a list of investigation LENSES — each one a specific, non-overlapping 
 
 Aim for as many lenses as the repo's actual distinct surface area warrants — a small single-purpose service might need 6-8, a large multi-domain backend might need 18-20. Do NOT pad with redundant/near-duplicate lenses just to hit a round number, and do NOT skip a real distinct area to save calls.
 
-For each lens, write: a short "name" (slug-like), a one-line "focus" description, and a full "prompt" — the COMPLETE instructions you'd hand to an independent subagent with no other context, telling it exactly what to explore (which kind of files/patterns to grep for, what to read) and what to return: a list of findings, each with title, file, line (best-effort), description of the concrete issue, and an initial impact/probability guess. Tell each lens agent to anchor every finding to a real file:line it actually read — no speculation about code it didn't look at. Each lens's "prompt" you write MUST also tell that lens agent not to investigate the excluded paths below, if any. Since this same lens may later run scoped to just a diff instead of the whole repo, phrase the prompt so it still makes sense when told "investigate only within these changed files/hunks" — i.e., don't hard-code "explore the whole repo" as the only mode of operation.${excludeNote}${depthNote}`,
-  { schema: LENSES_SCHEMA, phase: 'Lens design', label: 'lens-design', ...modelOpt },
+For each lens, return only a short "name" (slug-like) and a one-line "focus" description — do NOT write the full investigation prompt here, that is a separate step.${excludeNote}${depthNote}`,
+  { schema: PLAN_SCHEMA, phase: 'Lens design', label: 'lens-plan', ...modelOpt },
 )
-const lenses = (lensDesign?.lenses || []).filter((l) => l && l.prompt && l.name)
-log(`${lenses.length} lens(es) designed: ${lenses.map((l) => l.name).join(', ')}`)
+const planned = (plan?.lenses || []).filter((l) => l && l.name && l.focus)
+log(`${planned.length} lens(es) planned: ${planned.map((l) => l.name).join(', ')}`)
+
+// ── Write each lens's full prompt in small batches, not one giant call. A
+// real run hit the platform's output-token limit mid-generation asking for
+// ~19 lenses' full prompts (72K+ chars) in one non-interruptible turn, and a
+// retry of that exact single-call shape stalled a second, different way
+// (silent stream stop, no limit message). Batching bounds each call's
+// output regardless of total lens count — see design notes below.
+const BATCH_SIZE = 5
+const batches = []
+for (let i = 0; i < planned.length; i += BATCH_SIZE) batches.push(planned.slice(i, i + BATCH_SIZE))
+
+function writeBatchPrompt(batch) {
+  return `You are writing the full investigation prompt for ${batch.length} security-audit lens(es) already planned for this repo, given its profile:
+
+Languages: ${(profile?.languages || []).join(', ')} · Domain: ${profile?.domain_summary} · Architecture: ${profile?.architecture_summary}
+
+Lenses to write full prompts for (write ALL ${batch.length}, matching these names/focus verbatim):
+${batch.map((l) => `- "${l.name}" — ${l.focus}`).join('\n')}
+
+For each one, write a full "prompt" — the COMPLETE instructions you'd hand to an independent subagent with no other context, telling it exactly what to explore (which kind of files/patterns to grep for, what to read) and what to return: a list of findings, each with title, file, line (best-effort), description of the concrete issue, and an initial impact/probability guess. Tell each lens agent to anchor every finding to a real file:line it actually read — no speculation about code it didn't look at. Each prompt MUST also tell that lens agent not to investigate the excluded paths below, if any. Since this same lens may later run scoped to just a diff instead of the whole repo, phrase the prompt so it still makes sense when told "investigate only within these changed files/hunks" — i.e., don't hard-code "explore the whole repo" as the only mode of operation. You do not need to explore the repository yourself for THIS step — everything you need is already in this prompt.${excludeNote}`
+}
+
+async function writeBatch(batch) {
+  return agent(writeBatchPrompt(batch), {
+    schema: LENSES_SCHEMA,
+    phase: 'Lens design',
+    label: `lens-write:${batch.map((l) => l.name).join(',')}`,
+    ...modelOpt,
+  })
+}
+
+let batchResults = await parallel(batches.map((batch) => () => writeBatch(batch)))
+const failedIdx = batchResults.map((r, i) => (!r ? i : -1)).filter((i) => i >= 0)
+if (failedIdx.length > 0) {
+  log(`${failedIdx.length}/${batches.length} lens-writing batch(es) failed — retrying once...`)
+  const retried = await parallel(failedIdx.map((i) => () => writeBatch(batches[i])))
+  retried.forEach((r, k) => {
+    batchResults[failedIdx[k]] = r
+  })
+}
+const stillFailed = batchResults.filter((r) => !r).length
+if (stillFailed > 0) {
+  log(
+    `WARNING: ${stillFailed}/${batches.length} lens-writing batch(es) failed twice and were dropped — fewer lenses than planned will be persisted.`,
+  )
+}
+const lenses = batchResults.filter(Boolean).flatMap((r) => (r?.lenses || []).filter((l) => l && l.prompt && l.name))
+log(`${lenses.length}/${planned.length} lens(es) got a written prompt across ${batches.length} batch(es).`)
 
 return { profile, lenses }
 ```
@@ -337,3 +408,22 @@ return { profile, lenses }
   `model` failed every subagent call. Here the stakes are worse if unguarded: a failed
   lens-design call would otherwise persist an empty or garbage `lenses.json` that every
   future `audit`/`audit-diff` run silently inherits. Never regress this.
+- **Plan-then-batch-write, instead of one call for every lens's full prompt.** A real
+  run asked a single `agent()` call for ~19 lenses' full prompts (72K+ chars) in one
+  non-interruptible structured-output turn: it hit the platform's output-token limit
+  mid-generation and produced no further output for 2+ minutes; a retry of that exact
+  shape got further, then stalled a second, different way (a silent dead stream, no
+  limit message). Splitting into a small planning call (name/focus only — tiny output,
+  can't itself run long) followed by fixed-size batches of `BATCH_SIZE = 5` lenses each,
+  written in `parallel()`, bounds every individual call's output regardless of how many
+  lenses the repo needs, and a batch that fails outright is retried once on its own
+  rather than losing the whole lens set. This trades a few extra agent calls (one plan +
+  ⌈lenses/5⌉ batches, typically 4-5 total) for not depending on one giant call surviving
+  in one piece — deliberately not one call per lens, which would remove the stall risk
+  entirely but multiply agent count far more than the fix warrants.
+- **Tool use during lens-writing is discouraged by instruction, not enforced.** The
+  `agent()` call has no option to restrict tool access (checked against the Workflow
+  tool's actual API) — a real run's lens-design agent made its own unprompted `ls`/grep
+  calls despite already having everything it needed, adding latency. The batch-write
+  prompt explicitly says exploration isn't needed; if that proves insufficient in
+  practice, revisit once/if a tool-restriction option exists.
