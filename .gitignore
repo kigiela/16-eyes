@@ -1,3 +1,7 @@
 node_modules/
 .DS_Store
 *.log
+
+# local secrets (e.g. SKILLS_DIRECTORY_KEY for testing the skill scan)
+.env
+.env.*

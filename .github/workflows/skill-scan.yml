@@ -1,0 +1,51 @@
+name: Skill scan
+
+# Grades skills/16-eyes with Skills Directory's scanner (the same rules the
+# directory uses for its public grade) and fails the PR when the grade drops
+# below B. POST /api/v1/scan returns every finding with its line and a fix;
+# with ?fail_below=B a worse grade returns HTTP 422, which fails this step.
+#
+# Required repo secret: SKILLS_DIRECTORY_KEY — a Pro API key from
+# https://www.skillsdirectory.com (free keys are rejected by /scan).
+#   gh secret set SKILLS_DIRECTORY_KEY --repo kigiela/16-eyes
+#
+# PRs from forks don't get repo secrets, so the scan is skipped there (with a
+# notice) instead of failing on a 401 the contributor can't fix.
+
+on:
+  pull_request:
+    paths:
+      - "skills/**"
+      - ".github/workflows/skill-scan.yml"
+  workflow_dispatch: {}
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Zip the skill
+        run: cd skills && zip -qr ../skill.zip 16-eyes
+
+      - name: Scan with Skills Directory (fail below B)
+        env:
+          SKILLS_DIRECTORY_KEY: ${{ secrets.SKILLS_DIRECTORY_KEY }}
+        run: |
+          set -euo pipefail
+          if [ -z "${SKILLS_DIRECTORY_KEY:-}" ]; then
+            echo "::notice::SKILLS_DIRECTORY_KEY isn't available (fork PR or secret not set) — skipping the skill scan."
+            exit 0
+          fi
+          # --fail-with-body (not -f) so a 422 still prints the findings and
+          # their fixes into the log instead of failing silently.
+          curl -sS --fail-with-body \
+            -H "Authorization: Bearer ${SKILLS_DIRECTORY_KEY}" \
+            -F zip=@skill.zip \
+            "https://www.skillsdirectory.com/api/v1/scan?fail_below=B" \
+            -o scan.json || status=$?
+          jq . scan.json 2>/dev/null || cat scan.json
+          exit "${status:-0}"
